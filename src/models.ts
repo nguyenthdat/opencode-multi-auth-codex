@@ -6,6 +6,7 @@ const REASONING_LEVELS = ['none', 'low', 'medium', 'high', 'xhigh'] as const
 type ReasoningLevel = typeof REASONING_LEVELS[number]
 
 const MODEL_LIMITS: Record<string, { context: number; output: number }> = {
+  'gpt-5.5': { context: 400000, output: 128000 },
   'gpt-5.4': { context: 272000, output: 128000 },
   'gpt-5.3': { context: 272000, output: 128000 },
   'gpt-5.3-codex-spark': { context: 272000, output: 128000 },
@@ -46,8 +47,15 @@ function buildProviderModel(baseId: string, reasoning: ReasoningLevel): Provider
   }
 }
 
+function buildDefaultProviderModel(baseId: string): ProviderModel {
+  return {
+    ...buildProviderModel(baseId, 'medium'),
+    name: `${baseId} (OAuth)`
+  }
+}
+
 function supportsFastMode(baseId: string): boolean {
-  return baseId === 'gpt-5.4'
+  return baseId === 'gpt-5.5' || baseId === 'gpt-5.4'
 }
 
 function buildFastProviderModel(baseId: string): ProviderModel {
@@ -101,6 +109,8 @@ export function generateModelVariants(baseModels: OpenAIModel[]): Record<string,
     const baseId = model.id
     const isCodex = baseId.includes('codex')
 
+    result[baseId] = buildDefaultProviderModel(baseId)
+
     const levels: ReasoningLevel[] = isCodex
       ? ['low', 'medium', 'high', 'xhigh']
       : ['none', 'low', 'medium', 'high', 'xhigh']
@@ -120,6 +130,7 @@ export function generateModelVariants(baseModels: OpenAIModel[]): Record<string,
 
 export function getDefaultModels(): Record<string, ProviderModel> {
   const defaults = [
+    'gpt-5.5',
     'gpt-5.4',
     'gpt-5.3',
     'gpt-5.3-codex-spark',
@@ -139,6 +150,8 @@ export function getDefaultModels(): Record<string, ProviderModel> {
     const levels: ReasoningLevel[] = isCodex
       ? ['low', 'medium', 'high', 'xhigh']
       : ['none', 'low', 'medium', 'high', 'xhigh']
+
+    result[baseId] = buildDefaultProviderModel(baseId)
 
     for (const level of levels) {
       if (baseId === 'gpt-5.1-codex-mini' && !['medium', 'high'].includes(level)) continue

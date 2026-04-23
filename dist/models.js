@@ -1,6 +1,7 @@
 const MODELS_ENDPOINT = 'https://api.openai.com/v1/models';
 const REASONING_LEVELS = ['none', 'low', 'medium', 'high', 'xhigh'];
 const MODEL_LIMITS = {
+    'gpt-5.5': { context: 400000, output: 128000 },
     'gpt-5.4': { context: 272000, output: 128000 },
     'gpt-5.3': { context: 272000, output: 128000 },
     'gpt-5.3-codex-spark': { context: 272000, output: 128000 },
@@ -38,8 +39,14 @@ function buildProviderModel(baseId, reasoning) {
         }
     };
 }
+function buildDefaultProviderModel(baseId) {
+    return {
+        ...buildProviderModel(baseId, 'medium'),
+        name: `${baseId} (OAuth)`
+    };
+}
 function supportsFastMode(baseId) {
-    return baseId === 'gpt-5.4';
+    return baseId === 'gpt-5.5' || baseId === 'gpt-5.4';
 }
 function buildFastProviderModel(baseId) {
     const limits = getModelLimits(baseId);
@@ -85,6 +92,7 @@ export function generateModelVariants(baseModels) {
     for (const model of baseModels) {
         const baseId = model.id;
         const isCodex = baseId.includes('codex');
+        result[baseId] = buildDefaultProviderModel(baseId);
         const levels = isCodex
             ? ['low', 'medium', 'high', 'xhigh']
             : ['none', 'low', 'medium', 'high', 'xhigh'];
@@ -100,6 +108,7 @@ export function generateModelVariants(baseModels) {
 }
 export function getDefaultModels() {
     const defaults = [
+        'gpt-5.5',
         'gpt-5.4',
         'gpt-5.3',
         'gpt-5.3-codex-spark',
@@ -117,6 +126,7 @@ export function getDefaultModels() {
         const levels = isCodex
             ? ['low', 'medium', 'high', 'xhigh']
             : ['none', 'low', 'medium', 'high', 'xhigh'];
+        result[baseId] = buildDefaultProviderModel(baseId);
         for (const level of levels) {
             if (baseId === 'gpt-5.1-codex-mini' && !['medium', 'high'].includes(level))
                 continue;

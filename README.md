@@ -111,8 +111,9 @@ opencode plugin github:guard22/opencode-multi-auth-codex --global
 ```
 
 OpenCode support:
-- OpenCode `1.2.19+` includes built-in `gpt-5.4`
-- for older OpenCode builds, the plugin now backfills `gpt-5.4` and `gpt-5.4-fast` into runtime config by default
+- GPT-5.5 may appear in Codex before OpenCode ships built-in model metadata
+- the plugin backfills `gpt-5.5` and `gpt-5.5-fast` into runtime config by default
+- `gpt-5.4` remains available and can be selected or used as a rollback target
 - disable runtime model injection only if you explicitly want that behavior off:
 
 ```bash
@@ -321,16 +322,16 @@ Outlook login often shows interstitial pages after password entry:
 - `OPENCODE_MULTI_AUTH_TRUNCATION`
 - `OPENCODE_MULTI_AUTH_DEBUG`
 
-## GPT-5.4 mapping
+## Latest Codex Mapping
 
-The plugin can route older Codex selections to GPT-5.4 when you explicitly opt in.
+The plugin can route older Codex selections to the latest Codex backend model when you explicitly opt in.
 
 Default behavior:
 - exact model selection is preserved
 
 Environment variables:
 - `OPENCODE_MULTI_AUTH_PREFER_CODEX_LATEST=1` enables mapping to the latest backend model
-- `OPENCODE_MULTI_AUTH_CODEX_LATEST_MODEL=gpt-5.4` overrides the mapping target
+- `OPENCODE_MULTI_AUTH_CODEX_LATEST_MODEL=gpt-5.4` overrides the mapping target, for example to roll back from the default `gpt-5.5`
 - `OPENCODE_MULTI_AUTH_DEBUG=1` prints model mapping debug logs
 - `OPENCODE_MULTI_AUTH_INJECT_MODELS=0` disables automatic runtime model backfill
 
@@ -338,12 +339,12 @@ Environment variables:
 
 For OpenCode, the clean way to mirror Codex Fast mode is:
 
-- keep the model as `openai/gpt-5.4`
+- keep the model as `openai/gpt-5.5`
 - use a model variant such as `fast`
 - set `serviceTier=priority` in the variant config
 
 Behavior:
-- the backend model stays `gpt-5.4`
+- the backend model stays `gpt-5.5`
 - the plugin forwards the request with `service_tier=priority`
 - the plugin does not automatically lower reasoning or verbosity
 
@@ -354,7 +355,7 @@ Recommended OpenCode config:
   "provider": {
     "openai": {
       "models": {
-        "gpt-5.4": {
+        "gpt-5.5": {
           "variants": {
             "Medium Fast": {
               "reasoningEffort": "medium",

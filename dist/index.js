@@ -29,6 +29,7 @@ const OPENAI_HEADER_VALUES = {
     ORIGINATOR_CODEX: 'codex_cli_rs'
 };
 const JWT_CLAIM_PATH = 'https://api.openai.com/auth';
+const DEFAULT_LATEST_CODEX_MODEL = 'gpt-5.5';
 let pluginConfig = { ...DEFAULT_CONFIG };
 function configure(config) {
     pluginConfig = { ...pluginConfig, ...config };
@@ -105,15 +106,16 @@ function normalizeModel(model) {
         return 'gpt-5.1';
     const modelId = model.includes('/') ? model.split('/').pop() : model;
     const baseModel = modelId.replace(/-(?:fast|none|minimal|low|medium|high|xhigh)$/, '');
-    // OpenCode may lag behind the latest ChatGPT Codex model allowlist. Route known
-    // older Codex selections to the latest backend model when enabled.
-    // Codex model on the ChatGPT backend for users who want the newest model without
-    // waiting for upstream registry updates.
+    // OpenCode may lag behind the ChatGPT Codex model allowlist. Route known older
+    // Codex selections to the latest backend model when users opt in.
     const preferLatestRaw = process.env.OPENCODE_MULTI_AUTH_PREFER_CODEX_LATEST;
     const preferLatest = preferLatestRaw === '1' || preferLatestRaw === 'true';
     if (preferLatest &&
-        (baseModel === 'gpt-5.3-codex' || baseModel === 'gpt-5.2-codex' || baseModel === 'gpt-5-codex')) {
-        const latestModel = (process.env.OPENCODE_MULTI_AUTH_CODEX_LATEST_MODEL || 'gpt-5.4').trim();
+        (baseModel === 'gpt-5.4' ||
+            baseModel === 'gpt-5.3-codex' ||
+            baseModel === 'gpt-5.2-codex' ||
+            baseModel === 'gpt-5-codex')) {
+        const latestModel = (process.env.OPENCODE_MULTI_AUTH_CODEX_LATEST_MODEL || DEFAULT_LATEST_CODEX_MODEL).trim();
         if (process.env.OPENCODE_MULTI_AUTH_DEBUG === '1') {
             console.log(`[multi-auth] model map: ${baseModel} -> ${latestModel}`);
         }
@@ -123,6 +125,9 @@ function normalizeModel(model) {
 }
 function isSparkModel(model) {
     return typeof model === 'string' && model.startsWith('gpt-5.3-codex-spark');
+}
+function supportsFastMode(model) {
+    return model === 'gpt-5.5' || model === 'gpt-5.4';
 }
 function ensureContentType(headers) {
     const responseHeaders = new Headers(headers);
@@ -480,7 +485,7 @@ const MultiAuthPlugin = async ({ client, $, serverUrl, project, directory }) => 
             const injectModels = injectModelsRaw !== '0' && injectModelsRaw !== 'false';
             if (!injectModels)
                 return;
-            const latestModel = (process.env.OPENCODE_MULTI_AUTH_CODEX_LATEST_MODEL || 'gpt-5.4').trim();
+            const latestModel = (process.env.OPENCODE_MULTI_AUTH_CODEX_LATEST_MODEL || DEFAULT_LATEST_CODEX_MODEL).trim();
             try {
                 const openai = config.provider?.[PROVIDER_ID] || null;
                 if (!openai || typeof openai !== 'object')
@@ -489,8 +494,8 @@ const MultiAuthPlugin = async ({ client, $, serverUrl, project, directory }) => 
                 openai.whitelist ||= [];
                 const defaultModels = getDefaultModels();
                 const injectedModelIds = [latestModel];
-                if (latestModel === 'gpt-5.4' && defaultModels['gpt-5.4-fast']) {
-                    injectedModelIds.push('gpt-5.4-fast');
+                if (supportsFastMode(latestModel) && defaultModels[`${latestModel}-fast`]) {
+                    injectedModelIds.push(`${latestModel}-fast`);
                 }
                 for (const sparkVariant of [
                     'gpt-5.3-codex-spark-low',
@@ -606,7 +611,7 @@ const MultiAuthPlugin = async ({ client, $, serverUrl, project, directory }) => 
                         const url = toCodexBackendUrl(originalUrl);
                         const isStreaming = body?.stream === true;
                         const fastMode = /-fast$/.test(body.model || '');
-                        const supportedFastMode = fastMode && normalizedModel === 'gpt-5.4';
+                        const supportedFastMode = fastMode && supportsFastMode(normalizedModel);
                         const reasoningMatch = body.model?.match(/-(none|low|medium|high|xhigh)$/);
                         const payload = {
                             ...body,
@@ -637,7 +642,7 @@ const MultiAuthPlugin = async ({ client, $, serverUrl, project, directory }) => 
                         if (supportedFastMode) {
                             payload.service_tier = payload.service_tier || 'priority';
                             if (process.env.OPENCODE_MULTI_AUTH_DEBUG === '1') {
-                                console.log('[multi-auth] fast mode enabled: gpt-5.4 + service_tier=priority');
+                                console.log(`[multi-auth] fast mode enabled: ${normalizedModel} + service_tier=priority`);
                             }
                         }
                         else if (fastMode && process.env.OPENCODE_MULTI_AUTH_DEBUG === '1') {
