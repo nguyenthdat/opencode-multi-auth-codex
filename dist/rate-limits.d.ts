@@ -7,6 +7,8 @@ export declare function mergeRateLimits(existing: AccountRateLimits | undefined,
 export declare function parseRetryAfterHeader(retryAfter: string | null, now?: number): number | undefined;
 export declare function parseRateLimitResetFromError(text: string, now?: number): number | undefined;
 export declare function isRateLimitErrorText(text: string): boolean;
-export declare function getBlockingRateLimitResetAt(rateLimits: AccountRateLimits | undefined, now?: number): number | undefined;
+export declare function getBlockingRateLimitResetAt(rateLimits: AccountRateLimits | undefined, now?: number, opts?: {
+    conservativeWhenRemainingUnknown?: boolean;
+}): number | undefined;
 export {};
 //# sourceMappingURL=rate-limits.d.ts.map

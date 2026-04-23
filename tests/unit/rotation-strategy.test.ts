@@ -21,6 +21,13 @@ function createAccount(alias: string, usageCount: number): AccountCredentials {
   }
 }
 
+function createPlanAccount(alias: string, usageCount: number, planType: string): AccountCredentials {
+  return {
+    ...createAccount(alias, usageCount),
+    planType
+  }
+}
+
 describe('Rotation Strategy Runtime Behavior', () => {
   beforeEach(() => {
     process.env = {
@@ -83,5 +90,55 @@ describe('Rotation Strategy Runtime Behavior', () => {
     })
 
     expect(rotation?.account.alias).toBe('beta')
+  })
+
+  it('prefers pro accounts first for non-spark models', async () => {
+    const store = loadStore()
+    store.accounts.plus = createPlanAccount('plus', 0, 'plus')
+    store.accounts.pro = createPlanAccount('pro', 10, 'pro')
+    saveStore(store)
+
+    const rotation = await getNextAccount(
+      {
+        ...DEFAULT_CONFIG,
+        rotationStrategy: 'least-used'
+      },
+      { model: 'gpt-5.4' }
+    )
+
+    expect(rotation?.account.alias).toBe('pro')
+  })
+
+  it('restricts spark models to pro accounts only', async () => {
+    const store = loadStore()
+    store.accounts.plus = createPlanAccount('plus', 0, 'plus')
+    store.accounts.pro = createPlanAccount('pro', 10, 'pro')
+    saveStore(store)
+
+    const rotation = await getNextAccount(
+      {
+        ...DEFAULT_CONFIG,
+        rotationStrategy: 'least-used'
+      },
+      { model: 'gpt-5.3-codex-spark' }
+    )
+
+    expect(rotation?.account.alias).toBe('pro')
+  })
+
+  it('returns null for spark models when no pro accounts are available', async () => {
+    const store = loadStore()
+    store.accounts.plus = createPlanAccount('plus', 0, 'plus')
+    saveStore(store)
+
+    const rotation = await getNextAccount(
+      {
+        ...DEFAULT_CONFIG,
+        rotationStrategy: 'least-used'
+      },
+      { model: 'gpt-5.3-codex-spark-xhigh' }
+    )
+
+    expect(rotation).toBeNull()
   })
 })

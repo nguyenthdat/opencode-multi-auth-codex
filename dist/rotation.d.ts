@@ -8,7 +8,10 @@ export interface RotationResult {
         remainingMs: number;
     };
 }
-export declare function getNextAccount(config: typeof DEFAULT_CONFIG): Promise<RotationResult | null>;
+export interface AccountSelectionContext {
+    model?: string;
+}
+export declare function getNextAccount(config: typeof DEFAULT_CONFIG, selection?: AccountSelectionContext): Promise<RotationResult | null>;
 export declare function markRateLimited(alias: string, rateLimitedUntil: number): void;
 export declare function clearRateLimit(alias: string): void;
 export declare function markModelUnsupported(alias: string, cooldownMs: number, info?: {

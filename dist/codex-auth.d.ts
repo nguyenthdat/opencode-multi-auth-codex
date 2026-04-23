@@ -28,6 +28,7 @@ export declare function writeCodexAuthFile(auth: CodexAuthFile): void;
 export declare function decodeJwtPayload(token: string): Record<string, any> | null;
 export declare function getEmailFromClaims(claims: Record<string, any> | null): string | undefined;
 export declare function getAccountIdFromClaims(claims: Record<string, any> | null): string | undefined;
+export declare function getPlanTypeFromClaims(claims: Record<string, any> | null): string | undefined;
 export declare function getExpiryFromClaims(claims: Record<string, any> | null): number | undefined;
 export declare function getCodexAuthSummary(): CodexAuthSummary;
 export declare function resolveAliasForCurrentAuth(store?: ReturnType<typeof loadStore>): string | null;

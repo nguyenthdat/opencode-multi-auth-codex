@@ -60,7 +60,9 @@ export async function refreshRateLimitsForAccount(account) {
         const likelyRateLimit = isRateLimitErrorText(errorText);
         const parsedResetAt = parseRateLimitResetFromError(errorText, now);
         const fallbackResetAt = likelyRateLimit
-            ? getBlockingRateLimitResetAt(account.rateLimits, now)
+            ? getBlockingRateLimitResetAt(account.rateLimits, now, {
+                conservativeWhenRemainingUnknown: true
+            })
             : undefined;
         const rateLimitedUntil = parsedResetAt ?? fallbackResetAt;
         const updates = {
@@ -80,12 +82,15 @@ export async function refreshRateLimitsForAccount(account) {
         };
     }
     const now = Date.now();
+    const mergedRateLimits = mergeRateLimits(account.rateLimits, probe.rateLimits);
+    const blockingResetAt = getBlockingRateLimitResetAt(mergedRateLimits, now);
     updateAccount(account.alias, {
-        rateLimits: mergeRateLimits(account.rateLimits, probe.rateLimits),
+        rateLimits: mergedRateLimits,
         limitStatus: 'success',
         limitError: undefined,
         lastLimitProbeAt: now,
-        limitsConfidence: calculateLimitsConfidence(now, account.lastLimitErrorAt, 'success')
+        limitsConfidence: calculateLimitsConfidence(now, account.lastLimitErrorAt, 'success'),
+        rateLimitedUntil: blockingResetAt
     });
     logInfo(`Limits refreshed for ${account.alias} using model ${probe.probeModel || 'unknown'}, effort ${probe.probeEffort || 'default'}`);
     return { alias: account.alias, updated: true };

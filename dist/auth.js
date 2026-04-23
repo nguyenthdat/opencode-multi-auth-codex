@@ -4,7 +4,7 @@ import * as http from 'http';
 import * as url from 'url';
 import { addAccount, updateAccount, loadStore } from './store.js';
 import { clearAuthInvalid } from './rotation.js';
-import { decodeJwtPayload, getAccountIdFromClaims, getEmailFromClaims, getExpiryFromClaims } from './codex-auth.js';
+import { decodeJwtPayload, getAccountIdFromClaims, getEmailFromClaims, getExpiryFromClaims, getPlanTypeFromClaims } from './codex-auth.js';
 const OPENAI_ISSUER = 'https://auth.openai.com';
 const AUTHORIZE_URL = `${OPENAI_ISSUER}/oauth/authorize`;
 const TOKEN_URL = `${OPENAI_ISSUER}/oauth/token`;
@@ -151,11 +151,14 @@ export async function loginAccount(alias, flow, options) {
                 }
                 const accountId = getAccountIdFromClaims(idClaims) ||
                     getAccountIdFromClaims(accessClaims);
+                const planType = getPlanTypeFromClaims(idClaims) ||
+                    getPlanTypeFromClaims(accessClaims);
                 const store = addAccount(alias, {
                     accessToken: tokens.access_token,
                     refreshToken: tokens.refresh_token,
                     idToken: tokens.id_token,
                     accountId,
+                    planType,
                     expiresAt,
                     email,
                     lastRefresh: new Date(now).toISOString(),
@@ -246,7 +249,10 @@ export async function refreshToken(alias) {
             idToken: tokens.id_token || account.idToken,
             accountId: getAccountIdFromClaims(idClaims) ||
                 getAccountIdFromClaims(accessClaims) ||
-                account.accountId
+                account.accountId,
+            planType: getPlanTypeFromClaims(idClaims) ||
+                getPlanTypeFromClaims(accessClaims) ||
+                account.planType
         };
         const updatedStore = updateAccount(alias, updates);
         clearAuthInvalid(alias);

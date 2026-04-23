@@ -129,13 +129,11 @@ function getUserIdFromClaims(claims) {
         return auth.chatgpt_user_id;
     return undefined;
 }
-function getPlanTypeFromClaims(claims) {
+export function getPlanTypeFromClaims(claims) {
     if (!claims)
         return undefined;
     const auth = claims['https://api.openai.com/auth'];
-    if (typeof auth?.chatgpt_plan_type === 'string')
-        return auth.chatgpt_plan_type;
-    return undefined;
+    return typeof auth?.chatgpt_plan_type === 'string' ? auth.chatgpt_plan_type : undefined;
 }
 export function getExpiryFromClaims(claims) {
     if (!claims)
@@ -262,7 +260,7 @@ export function syncCodexAuthFile() {
     const accountId = normalized.accountId || getAccountIdFromClaims(idClaims) || getAccountIdFromClaims(accessClaims);
     const accountUserId = getAccountUserIdFromClaims(accessClaims) || getAccountUserIdFromClaims(idClaims);
     const userId = getUserIdFromClaims(accessClaims) || getUserIdFromClaims(idClaims);
-    const planType = getPlanTypeFromClaims(accessClaims) || getPlanTypeFromClaims(idClaims);
+    const planType = getPlanTypeFromClaims(idClaims) || getPlanTypeFromClaims(accessClaims);
     const expiresAt = getExpiryFromClaims(accessClaims) || getExpiryFromClaims(idClaims) || Date.now();
     const store = loadStore();
     const now = Date.now();

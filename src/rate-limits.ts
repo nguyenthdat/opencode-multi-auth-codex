@@ -209,7 +209,8 @@ export function isRateLimitErrorText(text: string): boolean {
 
 export function getBlockingRateLimitResetAt(
   rateLimits: AccountRateLimits | undefined,
-  now: number = Date.now()
+  now: number = Date.now(),
+  opts?: { conservativeWhenRemainingUnknown?: boolean }
 ): number | undefined {
   if (!rateLimits) return undefined
 
@@ -220,14 +221,18 @@ export function getBlockingRateLimitResetAt(
 
   const exhaustedResets: number[] = []
   const futureResets: number[] = []
+  let sawKnownRemaining = false
 
   for (const window of windows) {
     if (!window || typeof window.resetAt !== 'number' || window.resetAt <= now) {
       continue
     }
     futureResets.push(window.resetAt)
-    if (typeof window.remaining === 'number' && window.remaining <= 0) {
-      exhaustedResets.push(window.resetAt)
+    if (typeof window.remaining === 'number') {
+      sawKnownRemaining = true
+      if (window.remaining <= 0) {
+        exhaustedResets.push(window.resetAt)
+      }
     }
   }
 
@@ -235,7 +240,7 @@ export function getBlockingRateLimitResetAt(
     // If multiple windows are exhausted, wait for the last one to reset.
     return Math.max(...exhaustedResets)
   }
-  if (futureResets.length > 0) {
+  if (opts?.conservativeWhenRemainingUnknown && futureResets.length > 0 && !sawKnownRemaining) {
     // Conservative fallback when backend says limited but remaining counters are absent.
     return Math.max(...futureResets)
   }

@@ -187,7 +187,7 @@ export function isRateLimitErrorText(text) {
         normalized.includes('try again at') ||
         normalized.includes('retry after'));
 }
-export function getBlockingRateLimitResetAt(rateLimits, now = Date.now()) {
+export function getBlockingRateLimitResetAt(rateLimits, now = Date.now(), opts) {
     if (!rateLimits)
         return undefined;
     const windows = [
@@ -196,20 +196,24 @@ export function getBlockingRateLimitResetAt(rateLimits, now = Date.now()) {
     ];
     const exhaustedResets = [];
     const futureResets = [];
+    let sawKnownRemaining = false;
     for (const window of windows) {
         if (!window || typeof window.resetAt !== 'number' || window.resetAt <= now) {
             continue;
         }
         futureResets.push(window.resetAt);
-        if (typeof window.remaining === 'number' && window.remaining <= 0) {
-            exhaustedResets.push(window.resetAt);
+        if (typeof window.remaining === 'number') {
+            sawKnownRemaining = true;
+            if (window.remaining <= 0) {
+                exhaustedResets.push(window.resetAt);
+            }
         }
     }
     if (exhaustedResets.length > 0) {
         // If multiple windows are exhausted, wait for the last one to reset.
         return Math.max(...exhaustedResets);
     }
-    if (futureResets.length > 0) {
+    if (opts?.conservativeWhenRemainingUnknown && futureResets.length > 0 && !sawKnownRemaining) {
         // Conservative fallback when backend says limited but remaining counters are absent.
         return Math.max(...futureResets);
     }

@@ -8,7 +8,8 @@ import {
   decodeJwtPayload,
   getAccountIdFromClaims,
   getEmailFromClaims,
-  getExpiryFromClaims
+  getExpiryFromClaims,
+  getPlanTypeFromClaims
 } from './codex-auth.js'
 import type { AccountCredentials } from './types.js'
 
@@ -202,12 +203,16 @@ export async function loginAccount(
         const accountId =
           getAccountIdFromClaims(idClaims) ||
           getAccountIdFromClaims(accessClaims)
+        const planType =
+          getPlanTypeFromClaims(idClaims) ||
+          getPlanTypeFromClaims(accessClaims)
 
         const store = addAccount(alias, {
           accessToken: tokens.access_token,
           refreshToken: tokens.refresh_token,
           idToken: tokens.id_token,
           accountId,
+          planType,
           expiresAt,
           email,
           lastRefresh: new Date(now).toISOString(),
@@ -310,7 +315,11 @@ export async function refreshToken(alias: string): Promise<AccountCredentials | 
       accountId:
         getAccountIdFromClaims(idClaims) ||
         getAccountIdFromClaims(accessClaims) ||
-        account.accountId
+        account.accountId,
+      planType:
+        getPlanTypeFromClaims(idClaims) ||
+        getPlanTypeFromClaims(accessClaims) ||
+        account.planType
     }
 
     const updatedStore = updateAccount(alias, updates)

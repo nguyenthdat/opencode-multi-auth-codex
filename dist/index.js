@@ -121,6 +121,9 @@ function normalizeModel(model) {
     }
     return baseModel;
 }
+function isSparkModel(model) {
+    return typeof model === 'string' && model.startsWith('gpt-5.3-codex-spark');
+}
 function ensureContentType(headers) {
     const responseHeaders = new Headers(headers);
     if (!responseHeaders.has('content-type')) {
@@ -147,7 +150,9 @@ function extractErrorMessage(payload, fallbackText = '') {
 }
 function resolveRateLimitedUntil(rateLimits, headers, errorText, fallbackCooldownMs, now = Date.now()) {
     const retryAfterUntil = parseRetryAfterHeader(headers.get('retry-after'), now) || 0;
-    const windowResetUntil = getBlockingRateLimitResetAt(rateLimits, now) || 0;
+    const windowResetUntil = getBlockingRateLimitResetAt(rateLimits, now, {
+        conservativeWhenRemainingUnknown: true
+    }) || 0;
     const messageResetUntil = parseRateLimitResetFromError(errorText, now) || 0;
     const fallbackUntil = now + fallbackCooldownMs;
     return Math.max(fallbackUntil, retryAfterUntil, windowResetUntil, messageResetUntil);
@@ -487,6 +492,16 @@ const MultiAuthPlugin = async ({ client, $, serverUrl, project, directory }) => 
                 if (latestModel === 'gpt-5.4' && defaultModels['gpt-5.4-fast']) {
                     injectedModelIds.push('gpt-5.4-fast');
                 }
+                for (const sparkVariant of [
+                    'gpt-5.3-codex-spark-low',
+                    'gpt-5.3-codex-spark-medium',
+                    'gpt-5.3-codex-spark-high',
+                    'gpt-5.3-codex-spark-xhigh'
+                ]) {
+                    if (defaultModels[sparkVariant]) {
+                        injectedModelIds.push(sparkVariant);
+                    }
+                }
                 for (const modelID of injectedModelIds) {
                     const model = defaultModels[modelID];
                     if (!model || openai.models[modelID])
@@ -522,6 +537,14 @@ const MultiAuthPlugin = async ({ client, $, serverUrl, project, directory }) => 
                 }
                 const customFetch = async (input, init) => {
                     await syncAuthFromOpenCode(getAuth);
+                    let body = {};
+                    try {
+                        body = init?.body ? JSON.parse(init.body) : {};
+                    }
+                    catch {
+                        body = {};
+                    }
+                    const normalizedModel = normalizeModel(body.model);
                     const store = loadStore();
                     const forceState = getForceState();
                     const forcePinned = isForceActive() && !!forceState.forcedAlias;
@@ -543,7 +566,9 @@ const MultiAuthPlugin = async ({ client, $, serverUrl, project, directory }) => 
                             ...pluginConfig,
                             rotationStrategy: settings.settings.rotationStrategy
                         };
-                        const rotation = await getNextAccount(effectiveConfig);
+                        const rotation = await getNextAccount(effectiveConfig, {
+                            model: normalizedModel
+                        });
                         if (!rotation) {
                             if (forcePinned && forceState.forcedAlias) {
                                 const forced = loadStore().accounts[forceState.forcedAlias];
@@ -579,15 +604,7 @@ const MultiAuthPlugin = async ({ client, $, serverUrl, project, directory }) => 
                         }
                         const originalUrl = extractRequestUrl(input);
                         const url = toCodexBackendUrl(originalUrl);
-                        let body = {};
-                        try {
-                            body = init?.body ? JSON.parse(init.body) : {};
-                        }
-                        catch {
-                            body = {};
-                        }
                         const isStreaming = body?.stream === true;
-                        const normalizedModel = normalizeModel(body.model);
                         const fastMode = /-fast$/.test(body.model || '');
                         const supportedFastMode = fastMode && normalizedModel === 'gpt-5.4';
                         const reasoningMatch = body.model?.match(/-(none|low|medium|high|xhigh)$/);
@@ -608,9 +625,14 @@ const MultiAuthPlugin = async ({ client, $, serverUrl, project, directory }) => 
                         if (reasoningMatch?.[1]) {
                             payload.reasoning = {
                                 ...(payload.reasoning || {}),
-                                effort: reasoningMatch[1],
-                                summary: payload.reasoning?.summary || 'auto'
+                                effort: reasoningMatch[1]
                             };
+                            if (!isSparkModel(normalizedModel)) {
+                                payload.reasoning.summary = payload.reasoning?.summary || 'auto';
+                            }
+                        }
+                        if (isSparkModel(normalizedModel) && payload.reasoning?.summary !== undefined) {
+                            delete payload.reasoning.summary;
                         }
                         if (supportedFastMode) {
                             payload.service_tier = payload.service_tier || 'priority';
@@ -653,8 +675,10 @@ const MultiAuthPlugin = async ({ client, $, serverUrl, project, directory }) => 
                                 ? mergeRateLimits(account.rateLimits, limitUpdate)
                                 : account.rateLimits;
                             if (limitUpdate) {
+                                const blockingResetAt = getBlockingRateLimitResetAt(mergedRateLimits);
                                 updateAccount(account.alias, {
-                                    rateLimits: mergedRateLimits
+                                    rateLimits: mergedRateLimits,
+                                    rateLimitedUntil: blockingResetAt
                                 });
                             }
                             if (res.status === 401 || res.status === 403) {

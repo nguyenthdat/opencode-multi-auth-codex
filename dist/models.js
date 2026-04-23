@@ -3,6 +3,7 @@ const REASONING_LEVELS = ['none', 'low', 'medium', 'high', 'xhigh'];
 const MODEL_LIMITS = {
     'gpt-5.4': { context: 272000, output: 128000 },
     'gpt-5.3': { context: 272000, output: 128000 },
+    'gpt-5.3-codex-spark': { context: 272000, output: 128000 },
     'gpt-5.2': { context: 272000, output: 128000 },
     'gpt-5.3-codex': { context: 272000, output: 128000 },
     'gpt-5.2-codex': { context: 272000, output: 128000 },
@@ -101,6 +102,7 @@ export function getDefaultModels() {
     const defaults = [
         'gpt-5.4',
         'gpt-5.3',
+        'gpt-5.3-codex-spark',
         'gpt-5.3-codex',
         'gpt-5.2',
         'gpt-5.2-codex',

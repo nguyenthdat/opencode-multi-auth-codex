@@ -100,6 +100,7 @@ function validateAccount(acc, alias) {
         accountId: typeof acc.accountId === 'string' ? acc.accountId : undefined,
         accountUserId: typeof acc.accountUserId === 'string' ? acc.accountUserId : undefined,
         userId: typeof acc.userId === 'string' ? acc.userId : undefined,
+        planType: typeof acc.planType === 'string' ? acc.planType : undefined,
         expiresAt: acc.expiresAt,
         email: typeof acc.email === 'string' ? acc.email : undefined,
         lastRefresh: typeof acc.lastRefresh === 'string' ? acc.lastRefresh : undefined,

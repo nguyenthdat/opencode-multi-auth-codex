@@ -1,5 +1,6 @@
 import { getStoreDiagnostics, loadStore, saveStore, updateAccount } from './store.js';
 import { ensureValidToken } from './auth.js';
+import { decodeJwtPayload, getPlanTypeFromClaims } from './codex-auth.js';
 import { isForceActive, checkAndAutoClearForce, getForceState, clearForce } from './force-mode.js';
 import { getRuntimeSettings, calculateWeightedSelection } from './settings.js';
 const HEALTH_HYSTERESIS_MS = 10_000;
@@ -11,6 +12,44 @@ function shuffled(input) {
         [a[i], a[j]] = [a[j], a[i]];
     }
     return a;
+}
+function normalizePlanType(value) {
+    const normalized = value?.trim().toLowerCase();
+    return normalized ? normalized : undefined;
+}
+function getAccountPlanType(acc) {
+    const persisted = normalizePlanType(acc.planType);
+    if (persisted)
+        return persisted;
+    const idClaims = acc.idToken ? decodeJwtPayload(acc.idToken) : null;
+    const accessClaims = acc.accessToken ? decodeJwtPayload(acc.accessToken) : null;
+    return normalizePlanType(getPlanTypeFromClaims(idClaims) || getPlanTypeFromClaims(accessClaims));
+}
+function isProAccount(acc) {
+    return getAccountPlanType(acc) === 'pro';
+}
+function isSparkModel(model) {
+    return typeof model === 'string' && model.startsWith('gpt-5.3-codex-spark');
+}
+function getPreferredPools(store, availableAliases, selection) {
+    const proAliases = availableAliases.filter((alias) => isProAccount(store.accounts[alias]));
+    const nonProAliases = availableAliases.filter((alias) => !isProAccount(store.accounts[alias]));
+    if (isSparkModel(selection?.model)) {
+        return {
+            primaryAliases: proAliases,
+            fallbackAliases: []
+        };
+    }
+    if (proAliases.length > 0) {
+        return {
+            primaryAliases: proAliases,
+            fallbackAliases: nonProAliases
+        };
+    }
+    return {
+        primaryAliases: availableAliases,
+        fallbackAliases: []
+    };
 }
 function evaluateAccountHealth(acc, now) {
     const wasRateLimited = !!(acc.rateLimitedUntil && acc.rateLimitedUntil > now - HEALTH_HYSTERESIS_MS);
@@ -51,7 +90,7 @@ function evaluateAccountHealth(acc, now) {
         priority
     };
 }
-export async function getNextAccount(config) {
+export async function getNextAccount(config, selection) {
     // Phase E: Check and auto-clear expired/invalid force state
     const autoClear = checkAndAutoClearForce();
     if (autoClear.wasCleared) {
@@ -138,10 +177,10 @@ export async function getNextAccount(config) {
     })();
     const runtimeSettings = getRuntimeSettings();
     const rotationStrategy = runtimeSettings.settings.rotationStrategy || config.rotationStrategy;
-    const buildCandidates = () => {
+    const buildCandidates = (candidateAliases) => {
         switch (rotationStrategy) {
             case 'least-used': {
-                const sorted = [...availableAliases].sort((a, b) => {
+                const sorted = [...candidateAliases].sort((a, b) => {
                     const aa = store.accounts[a];
                     const bb = store.accounts[b];
                     const healthA = healthMap.get(a);
@@ -160,7 +199,7 @@ export async function getNextAccount(config) {
                 return { aliases: sorted };
             }
             case 'random': {
-                const sorted = [...availableAliases].sort((a, b) => {
+                const sorted = [...candidateAliases].sort((a, b) => {
                     const healthA = healthMap.get(a);
                     const healthB = healthMap.get(b);
                     return (healthB?.priority || 0) - (healthA?.priority || 0);
@@ -172,10 +211,10 @@ export async function getNextAccount(config) {
             case 'weighted-round-robin': {
                 const weights = runtimeSettings.settings.accountWeights;
                 // Filter to healthy accounts with weights
-                const weightedAliases = availableAliases.filter(alias => (weights[alias] || 0) > 0);
+                const weightedAliases = candidateAliases.filter(alias => (weights[alias] || 0) > 0);
                 if (weightedAliases.length === 0) {
                     // Fallback to round-robin if no weights defined
-                    const sorted = [...availableAliases].sort((a, b) => {
+                    const sorted = [...candidateAliases].sort((a, b) => {
                         const healthA = healthMap.get(a);
                         const healthB = healthMap.get(b);
                         return (healthB?.priority || 0) - (healthA?.priority || 0);
@@ -194,7 +233,7 @@ export async function getNextAccount(config) {
                 const selected = calculateWeightedSelection(weightedAliases, weights);
                 if (!selected) {
                     // Fallback to round-robin
-                    const sorted = [...availableAliases].sort((a, b) => {
+                    const sorted = [...candidateAliases].sort((a, b) => {
                         const healthA = healthMap.get(a);
                         const healthB = healthMap.get(b);
                         return (healthB?.priority || 0) - (healthA?.priority || 0);
@@ -207,7 +246,7 @@ export async function getNextAccount(config) {
             }
             case 'round-robin':
             default: {
-                const sorted = [...availableAliases].sort((a, b) => {
+                const sorted = [...candidateAliases].sort((a, b) => {
                     const healthA = healthMap.get(a);
                     const healthB = healthMap.get(b);
                     return (healthB?.priority || 0) - (healthA?.priority || 0);
@@ -224,7 +263,10 @@ export async function getNextAccount(config) {
             }
         }
     };
-    const { aliases: candidates, nextIndex } = buildCandidates();
+    const { primaryAliases, fallbackAliases } = getPreferredPools(store, availableAliases, selection);
+    const primary = buildCandidates(primaryAliases);
+    const fallback = fallbackAliases.length > 0 ? buildCandidates(fallbackAliases) : { aliases: [] };
+    const candidates = [...primary.aliases, ...fallback.aliases];
     for (const candidate of candidates) {
         const token = await ensureValidToken(candidate);
         if (!token) {
@@ -242,6 +284,7 @@ export async function getNextAccount(config) {
         });
         store.activeAlias = candidate;
         store.lastRotation = now;
+        const nextIndex = primary.aliases.includes(candidate) ? primary.nextIndex : fallback.nextIndex;
         if (nextIndex) {
             store.rotationIndex = nextIndex(candidate);
         }

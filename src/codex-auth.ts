@@ -168,11 +168,10 @@ function getUserIdFromClaims(claims: Record<string, any> | null): string | undef
   return undefined
 }
 
-function getPlanTypeFromClaims(claims: Record<string, any> | null): string | undefined {
+export function getPlanTypeFromClaims(claims: Record<string, any> | null): string | undefined {
   if (!claims) return undefined
   const auth = claims['https://api.openai.com/auth'] as { chatgpt_plan_type?: string } | undefined
-  if (typeof auth?.chatgpt_plan_type === 'string') return auth.chatgpt_plan_type
-  return undefined
+  return typeof auth?.chatgpt_plan_type === 'string' ? auth.chatgpt_plan_type : undefined
 }
 
 export function getExpiryFromClaims(claims: Record<string, any> | null): number | undefined {
@@ -322,7 +321,7 @@ export function syncCodexAuthFile(): {
   const accountId = normalized.accountId || getAccountIdFromClaims(idClaims) || getAccountIdFromClaims(accessClaims)
   const accountUserId = getAccountUserIdFromClaims(accessClaims) || getAccountUserIdFromClaims(idClaims)
   const userId = getUserIdFromClaims(accessClaims) || getUserIdFromClaims(idClaims)
-  const planType = getPlanTypeFromClaims(accessClaims) || getPlanTypeFromClaims(idClaims)
+  const planType = getPlanTypeFromClaims(idClaims) || getPlanTypeFromClaims(accessClaims)
   const expiresAt = getExpiryFromClaims(accessClaims) || getExpiryFromClaims(idClaims) || Date.now()
 
   const store = loadStore()
