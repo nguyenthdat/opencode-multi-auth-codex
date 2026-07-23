@@ -9,6 +9,7 @@ node
 
 # Auto-login
 auto-login/credentials.json
+auto-login/accounts.txt
 auto-login/debug_*.png
 auto-login/__pycache__/
 .cloakbrowser-artifacts/

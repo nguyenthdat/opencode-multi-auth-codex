@@ -73,14 +73,16 @@ jobs:
       - name: Typecheck
         run: bun run lint
 
-      - name: Test
-        run: bun test
-
       - name: Build
         run: bun run build
 
+      - name: Test
+        run: bun test
+
       - name: Verify generated files are current
-        run: git diff --exit-code -- dist
+        run: |
+          git diff --exit-code -- dist
+          test -z "$(git status --porcelain --untracked-files=all -- dist)"
 
       - name: Audit dependencies
         run: bun audit
@@ -90,6 +92,18 @@ jobs:
         shell: bash
         run: |
           npm pack --json > npm-pack.json
+          node -e '
+            const [pack] = require("./npm-pack.json")
+            const files = new Set(pack.files.map((entry) => entry.path))
+            const required = [
+              "dist/cli.js",
+              "dist/web.js",
+              "dist/web-ui/dashboard.js",
+              "dist/web-ui/dashboard.css"
+            ]
+            const missing = required.filter((file) => !files.has(file))
+            if (missing.length) throw new Error(`Missing package files: ${missing.join(", ")}`)
+          '
           TARBALL=$(node -e "const [pack] = require('./npm-pack.json'); process.stdout.write(pack.filename)")
           sha256sum "$TARBALL" > "$TARBALL.sha256"
           echo "tarball=$TARBALL" >> "$GITHUB_OUTPUT"

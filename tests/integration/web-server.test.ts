@@ -113,4 +113,31 @@ describe('web server hardening', () => {
       fs.unwatchFile(getCodexAuthPath())
     }
   })
+
+  it('rejects hostile Host and Origin headers', async () => {
+    const port = await getFreePort()
+    const server = startWebConsole({ host: '127.0.0.1', port })
+
+    try {
+      await once(server, 'listening')
+
+      const hostResponse = await fetch(`http://127.0.0.1:${port}/`, {
+        headers: { Host: `attacker.example:${port}` }
+      })
+      expect(hostResponse.status).toBe(403)
+
+      const originResponse = await fetch(`http://127.0.0.1:${port}/api/limits/stop`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Origin: 'https://attacker.example'
+        },
+        body: '{}'
+      })
+      expect(originResponse.status).toBe(403)
+    } finally {
+      await closeServer(server)
+      fs.unwatchFile(getCodexAuthPath())
+    }
+  })
 })

@@ -1,5 +1,10 @@
 # GPT-5.4 Fast Benchmark
 
+> Historical point-in-time benchmark. It predates the current GPT-5.6 model
+> guidance and is not current release validation. Original package version,
+> commit, run count, and environment were not recorded, so treat the numbers as
+> directional only.
+
 This benchmark was run against OpenCode using the multi-auth Codex plugin in a real repository, with continued-session prompts that read files, analyze code, and reuse the same session across multiple turns.
 
 ## Summary Table

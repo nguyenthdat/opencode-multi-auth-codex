@@ -8,13 +8,20 @@ configurable routing, limit visibility, and failure recovery.
 [![license](https://img.shields.io/github/license/nguyenthdat/opencode-multi-auth-codex)](LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/nguyenthdat/opencode-multi-auth-codex)](https://github.com/nguyenthdat/opencode-multi-auth-codex/stargazers)
 
-<img width="1659" height="888" alt="image" src="https://github.com/user-attachments/assets/c72b4d04-be1b-4222-9094-454c2105336f" />
+<img width="1440" alt="Codex account control React dashboard" src="https://raw.githubusercontent.com/nguyenthdat/opencode-multi-auth-codex/main/docs/images/react-dashboard.png" />
+
+Screenshot data is illustrative and does not contain live credentials.
+
+The localhost dashboard is built with React 19 and bundled into the package. It
+does not load a frontend framework or fonts from a CDN at runtime.
 
 ## Documentation map
 
 - `README.md` -> primary operator and developer documentation for current behavior.
-- `docs/ADMIN_MERGE_BRIEF.md` -> concise upstream/admin review summary.
-- `docs/PHASE_H_VALIDATION.md` -> final validation report (current readiness reference).
+- `SECURITY.md` -> current dashboard boundary and credential-handling rules.
+- `OPENCODE_SETUP_1TO1.md` -> current OpenCode, TUI, CLI, and React-dashboard setup.
+- `SANDBOX_QUICK_REF.md` -> isolated local test environment.
+- `TEST_EXECUTION_PLAN.md` -> current automated/manual validation boundaries.
 - `codextesting.md` -> live/manual testing runbook.
 - `docs/README.md` -> full docs index with authoritative vs historical references.
 
@@ -22,7 +29,7 @@ configurable routing, limit visibility, and failure recovery.
 
 - Rotates requests across multiple ChatGPT/Codex OAuth accounts.
 - Keeps a local account store with migration, validation, and atomic writes.
-- Provides OpenCode TUI controls and a localhost dashboard to manage accounts and limits.
+- Provides OpenCode TUI controls and a responsive React dashboard to manage accounts and limits.
 - Supports force mode (pin one alias), account enable/disable, and re-auth.
 - Supports settings-driven rotation strategy (`round-robin`, `least-used`, `random`, `weighted-round-robin`).
 - Probes limits safely and keeps authoritative data quality rules.
@@ -30,12 +37,13 @@ configurable routing, limit visibility, and failure recovery.
 
 ## Current implementation status
 
-- Core phases A-G are implemented in this workspace.
-- Validation scripts are available for: unit, integration, web-headless, failure, stress, sandbox, soak.
+- Core account routing, lifecycle, force, settings, limits, TUI, and React-dashboard features are implemented.
+- Validation scripts cover unit, integration, dashboard asset smoke, failure, stress, sandbox, and short soak scaffolding.
 - Web hardening fixes are in place:
   - localhost-only bind enforcement
+  - loopback Host and Origin validation
   - malformed JSON returns deterministic `400` without process crash
-  - dashboard client script parse issue fixed
+  - bundled React assets use a restrictive content security policy
 
 ## Behavior guarantees (latest)
 
@@ -44,9 +52,9 @@ configurable routing, limit visibility, and failure recovery.
 - Rotation strategy control is shown next to Force Mode in the dashboard.
 - Strategy changes from dashboard settings are applied to runtime selection logic (not just persisted state/UI display).
 - Force Mode and strategy interaction is explicit:
-  - while Force Mode is ON, strategy changes are saved
-  - saved strategy becomes active when Force Mode is turned OFF
-- Dashboard controls include mouseover help text for Force Mode and rotation strategy definitions.
+  - while Force Mode is ON, normal strategy selection is paused
+  - clearing Force Mode restores the strategy captured when it was enabled
+- Dashboard controls include visible guidance for Force Mode and rotation strategy behavior.
 - Account enable/disable toggle is authoritative for eligibility in rotation.
 
 ## Rotation strategy reference
@@ -55,24 +63,26 @@ configurable routing, limit visibility, and failure recovery.
 - `least-used` -> prefer the healthy enabled account with the lowest usage count.
 - `random` -> pick randomly from healthy enabled accounts.
 - `weighted-round-robin` -> split traffic by configured account weights (example: `0.70/0.20/0.10` ≈ `70%/20%/10%`).
-- Force Mode precedence -> when Force Mode is ON, strategy is paused; strategy changes are saved and become active when Force Mode is OFF.
+- Force Mode precedence -> when Force Mode is ON, strategy is paused; clearing force restores the pre-force strategy.
 
 ## Repository structure
 
 - `src/` -> TypeScript source
-- `dist/` -> compiled output (`tsc` generated)
+- `web-ui/` -> React dashboard source and styles
+- `dist/` -> generated backend and package output
+- `dist/web-ui/` -> Bun-bundled React dashboard JS, CSS, and source map
 - `tests/unit/` -> unit tests
 - `tests/integration/` -> integration tests
-- `tests/web-headless/` -> headless UI smoke tests
+- `tests/web-headless/` -> dashboard HTTP/asset smoke tests (not browser E2E)
 - `tests/failure/` -> failure-injection tests
 - `tests/stress/` -> stress/concurrency tests
 - `tests/sandbox/` -> sandbox isolation tests
 - `tests/soak/` -> soak scaffolding
 - `docs/` -> QA and phase documentation (see `docs/README.md` for canonical/historical split)
-- `IMPLEMENTATION_PLAN.md` -> full plan and contracts
+- `IMPLEMENTATION_PLAN.md` -> historical phased plan with a current React addendum
 - `TEST_EXECUTION_PLAN.md` -> required test order and gates
 - `codextesting.md` -> live testing TODO for Codex CLI sessions
-- `auto-login/` -> Python script for bulk Outlook-based OAuth login
+- `auto-login/` -> Python OAuth automation helpers for authorized accounts
 
 ## Requirements
 
@@ -217,38 +227,59 @@ Open `http://127.0.0.1:3434`.
 Alternatively, restart OpenCode and run `/codex` to manage and check accounts
 without leaving the OpenCode TUI.
 
-## Automated Bulk Login (Outlook)
+## Automated Bulk Login (CloakBrowser/Playwright)
 
-The `auto-login/` directory contains a standalone Python script that **automates the full OAuth login flow** for multiple Outlook-based ChatGPT accounts. Instead of manually running `opencode-multi-auth add` and clicking through the browser for each account, the script handles everything:
+The `auto-login/` directory contains a standalone Python script that **automates the OAuth login flow** for accounts you own. It prefers CloakBrowser when installed and falls back to regular Playwright:
 
 - Opens OpenAI auth page
-- Enters email, requests a one-time login code
-- Logs into Outlook Web to read the verification code
-- Enters the code, clicks through the consent page
-- Captures the OAuth tokens and writes them directly into the plugin store
+- Enters email/password and a TOTP authenticator code when requested
+- Can still read an email one-time code from Outlook Web
+- Uses SMSPool only when OpenAI presents a phone verification challenge
+- Polls SMSPool's recommended `/request/active` endpoint and retries cancellation of an unused order on failure
+- Deduplicates credential rows and stored accounts by normalized email
+- Clicks through the consent page
+- Completes a dashboard-owned OAuth callback, or writes standalone results to the helper's legacy store
 
 ### Prerequisites
 
-- **Python 3.9+**
-- **Playwright** (Python):
-  ```bash
-  pip install playwright
-  playwright install chromium
-  ```
-- **Outlook.com accounts** linked to ChatGPT (the script reads OTP codes from Outlook Web)
+- **Python 3.10+**
+- An SMSPool API key is needed only if an account receives a phone challenge.
+
+Install the Python dependencies from the bundled requirements file:
+
+```bash
+uv venv
+uv pip install -r auto-login/requirements.txt
+uv run python -m cloakbrowser install
+```
+
+The requirements include CloakBrowser, Playwright, and python-dotenv. To use
+the regular Playwright fallback, also install its stock Chromium binary:
+
+```bash
+uv run playwright install chromium
+```
 
 ### Setup
 
-1. Copy the example credentials file:
+1. Create a private JSON credentials file:
    ```bash
-   cp auto-login/credentials.example.json auto-login/credentials.json
+   install -m 600 auto-login/credentials.example.json auto-login/credentials.json
    ```
 
-2. Edit `auto-login/credentials.json` with your real accounts:
+2. Edit `auto-login/credentials.json` with your accounts:
    ```json
    {
      "defaults": {
-       "chatgpt_password": "SharedPasswordIfAny"
+       "chatgpt_password": "SharedPasswordIfAny",
+       "smspool": {
+         "country": 1,
+         "service": 671,
+         "pricing_option": 0,
+         "max_price": "0.50",
+          "timeout_seconds": 60,
+          "max_orders": 3
+       }
      },
      "accounts": [
        {
@@ -256,6 +287,7 @@ The `auto-login/` directory contains a standalone Python script that **automates
          "email": "your-email@outlook.com",
          "outlook_password": "your-outlook-password",
          "chatgpt_password": "your-chatgpt-password",
+         "totp_secret": "JBSWY3DPEHPK3PXP",
          "enabled": true
        }
      ]
@@ -263,27 +295,85 @@ The `auto-login/` directory contains a standalone Python script that **automates
    ```
 
    - `defaults.chatgpt_password` is used when an account doesn't specify its own.
-   - `outlook_password` is required for reading OTP codes from Outlook inbox.
+   - `outlook_password` is optional and only used to read login codes from Outlook inbox.
+   - `totp_secret` is the Base32 authenticator secret, not the current six-digit code.
+   - SMSPool service `671` is `OpenAI / ChatGPT` in the official SMSPool collection.
    - Set `enabled: false` to skip an account without removing it.
+
+   The standalone helper reads this file by default. The React dashboard reads
+   `~/.config/opencode-multi-auth/credentials.json` unless
+   `OPENCODE_MULTI_AUTH_AUTO_LOGIN_CREDENTIALS_FILE` overrides it. To reuse the
+   same source-checkout file when launching the dashboard:
+
+   ```bash
+   export OPENCODE_MULTI_AUTH_AUTO_LOGIN_CREDENTIALS_FILE="$PWD/auto-login/credentials.json"
+   ```
+
+3. Alternatively, create a private pipe-delimited account file:
+   ```bash
+   install -m 600 auto-login/accounts.example.txt auto-login/accounts.txt
+   ```
+
+   Its format is:
+   ```text
+   |email|password|2mfa secret key|
+   |one@example.com|password-one|JBSWY3DPEHPK3PXP|
+   |two@example.com|password-two|JBSWY3DPEHPK3PXP|
+   ```
+
+   Blank lines, comments beginning with `#`, and optional row numbers such as
+   `1. |email|password|secret|` are accepted.
+
+4. Create a private root `.env` file and set the SMSPool key:
+   ```bash
+   install -m 600 .env.example .env
+   ```
+
+   Set `SMSPOOL_API_KEY=...` in `.env`. The script loads only `SMSPOOL_*` keys
+   from this file and does not override a value already exported in the shell.
+   Optional environment overrides are `SMSPOOL_COUNTRY`, `SMSPOOL_SERVICE`,
+   `SMSPOOL_POOL`, `SMSPOOL_MAX_PRICE`, `SMSPOOL_PRICING_OPTION`,
+   `SMSPOOL_AREA_CODE`, `SMSPOOL_EXCLUDE`, `SMSPOOL_TIMEOUT`, and
+   `SMSPOOL_MAX_ORDERS`. Each order is hard-capped at 60 seconds; the script
+   confirms cancellation/refund before trying a different number.
 
 ### Usage
 
 ```bash
-# Check which accounts need login
-python3 auto-login/auto_login.py --check
+# Check a pipe-delimited account list
+uv run python auto-login/auto_login.py \
+  --credentials-file auto-login/accounts.txt --check
 
-# Login all enabled accounts (headless)
-python3 auto-login/auto_login.py
+# Login all enabled accounts with CloakBrowser
+uv run python auto-login/auto_login.py \
+  --credentials-file auto-login/accounts.txt --browser cloak
 
 # Login a specific account by index
-python3 auto-login/auto_login.py --account 0
+uv run python auto-login/auto_login.py \
+  --credentials-file auto-login/accounts.txt --account 0
 
 # Login a specific account by email
-python3 auto-login/auto_login.py --email user@outlook.com
+uv run python auto-login/auto_login.py \
+  --credentials-file auto-login/accounts.txt --email user@example.com
 
 # Run with visible browser (for debugging)
-python3 auto-login/auto_login.py --visible
+uv run python auto-login/auto_login.py \
+  --credentials-file auto-login/accounts.txt --browser cloak --visible
+
+# Force the original Playwright path
+uv run python auto-login/auto_login.py \
+  --credentials-file auto-login/accounts.txt --browser playwright
+
+# Run the standalone helper unit tests
+uv run --with 'python-dotenv>=1.2.1,<2' \
+  python -m unittest auto-login/test_auto_login.py
 ```
+
+Standalone direct-store mode still writes the helper's legacy file at
+`~/.config/opencode/opencode-multi-auth-codex-accounts.json`, whose schema is
+not the current TypeScript plugin store. Prefer `/codex`,
+`opencode-multi-auth add`, or dashboard-assisted auto-login when the account
+must appear in `~/.config/opencode-multi-auth/accounts.json`.
 
 ### How it works
 
@@ -300,10 +390,14 @@ OpenAI Auth                    Outlook Web                  Local Server
     |  ----redirect callback-----> | ----code via HTTP GET----> |
     |                              |                            |  7. Capture code
     |                              |                            |  8. Exchange for tokens
-    |                              |                            |  9. Write to plugin store
+    |                              |                            |  9. Complete dashboard callback or legacy standalone write
 ```
 
-The script generates a PKCE challenge identical to the plugin's own OAuth flow, starts a local HTTP server on port `1455` to capture the callback, and writes tokens in the exact v2 store format the plugin expects.
+The script generates a PKCE challenge compatible with the OAuth flow. In
+dashboard-assisted mode, TypeScript owns the callback and updates the current
+plugin store. In standalone mode, Python starts a local server on port `1455`
+and writes its legacy store format; that file is not interchangeable with the
+current TypeScript store.
 
 ### Microsoft interstitials
 
@@ -320,7 +414,11 @@ Outlook login often shows interstitial pages after password entry:
 
 - **`--visible` mode** shows the browser so you can see exactly where the flow gets stuck.
 - **Debug screenshots** are saved as `auto-login/debug_<user>_<step>.png` on failure.
-- **SSL errors on macOS**: the script uses `ssl._create_unverified_context()` for token exchange requests. This is safe for local automation.
+- **SMSPool order errors** include the API's HTTP status and message but never print the API key.
+- **No phone challenge** means no SMSPool order is purchased.
+- **Phone challenge without `SMSPOOL_API_KEY`** stops with an actionable error instead of buying a number implicitly.
+- **`--auth-url` phone retry** requires restarting login from the dashboard because a rejected/expired phone order needs a fresh OAuth URL.
+- **SSL errors on macOS**: the script currently uses `ssl._create_unverified_context()` for selected remote token/userinfo requests. This compatibility workaround weakens TLS authentication; fixing the local CA trust chain is preferred.
 - **Port 1455 in use**: kill any process using that port, or change `REDIRECT_PORT` in the script.
 - **Stale OTP codes**: if the inbox has old verification emails, the script may pick up an expired code. Clear the inbox or wait for a fresh email.
 
@@ -334,7 +432,7 @@ CLI binary on your shell `PATH`.
 - `opencode-multi-auth add <alias>` -> add account via OAuth
 - `opencode-multi-auth remove <alias>` -> remove account
 - `opencode-multi-auth list` -> list configured accounts
-- `opencode-multi-auth status` -> full status
+- `opencode-multi-auth status` -> basic account/token status
 - `opencode-multi-auth path` -> print store path
 - `opencode-multi-auth web --host 127.0.0.1 --port 3434` -> run dashboard
 - `opencode-multi-auth service install|disable|status` -> systemd user service helpers
@@ -345,6 +443,8 @@ CLI binary on your shell `PATH`.
 - `GET /api/logs`
 - `POST /api/sync`
 - `POST /api/auth/start`
+- `POST /api/auto-login/start`
+- `POST /api/auto-login/add`
 - `POST /api/switch`
 - `POST /api/remove`
 - `POST /api/account/meta`
@@ -375,6 +475,9 @@ CLI binary on your shell `PATH`.
 - `OPENCODE_MULTI_AUTH_CODEX_AUTH_FILE` -> override Codex `auth.json`
 - `CODEX_SOFT_STORE_PASSPHRASE` -> encrypt account store at rest
 - `CODEX_SOFT_LOG_PATH` -> override dashboard log path
+- `OPENCODE_MULTI_AUTH_AUTO_LOGIN_SCRIPT` -> override dashboard automation script
+- `OPENCODE_MULTI_AUTH_AUTO_LOGIN_CREDENTIALS_FILE` -> override dashboard saved-credential file
+- `OPENCODE_MULTI_AUTH_AUTO_LOGIN_PYTHON` -> override Python executable used by the dashboard
 
 ### Rotation and limits
 
@@ -384,6 +487,15 @@ CLI binary on your shell `PATH`.
 - `OPENCODE_MULTI_AUTH_TOKEN_FAILURE_COOLDOWN_MS`
 - `OPENCODE_MULTI_AUTH_PROBE_EFFORT`
 - `OPENCODE_MULTI_AUTH_LIMITS_PROBE_MODELS`
+- `OPENCODE_MULTI_AUTH_REFRESH_QUEUE_CONCURRENCY`
+- `OPENCODE_MULTI_AUTH_USAGE_BASE_URL`
+- `CODEX_CLI_BIN`
+
+### Standalone auto-login
+
+- `OPENCODE_MULTI_AUTH_BROWSER` -> choose `auto`, `cloak`, or `playwright`
+- `OPENCODE_MULTI_AUTH_NO_SANDBOX=1` -> disable the browser no-sandbox flag where supported
+- `SMSPOOL_CARRIER` -> optional SMSPool carrier filter
 
 ### Model mapping and runtime behavior
 
@@ -459,9 +571,12 @@ See [docs/gpt-5.4-fast-benchmark.md](./docs/gpt-5.4-fast-benchmark.md) for a con
 
 - Dashboard host is loopback-only (`127.0.0.1`, `::1`, `localhost`).
 - Non-loopback host bind is rejected.
+- Host and browser Origin authorities must match loopback and the dashboard port.
+- The dashboard has no authentication; any local process able to reach the port can call its APIs.
 - Sensitive token patterns are redacted in logs.
 - Store file permissions are restricted (`0o600`).
 - Antigravity APIs are blocked when feature flag is off.
+- See `SECURITY.md` for credential-file, source-map, and local threat-model details.
 
 ## Build and test
 
@@ -477,9 +592,13 @@ bun run test:failure
 bun run test:stress
 bun run test:sandbox
 bun run test:soak:48h
+uv run --with 'python-dotenv>=1.2.1,<2' python -m unittest auto-login/test_auto_login.py
 ```
 
-Current test script surfaces are scaffolded and active. For true long soak, set a long duration and keep the run alive.
+`test:web:headless` is an HTTP/asset smoke test; it does not execute React in a
+browser. `test:soak:48h` currently runs a short scaffold with a 120-second test
+timeout and is not evidence of a true 48-hour soak. See
+`TEST_EXECUTION_PLAN.md` for browser and long-duration gates.
 
 ## Live validation runbook
 
@@ -495,8 +614,9 @@ Use `codextesting.md` for the Codex CLI live-testing checklist and copy-paste co
 
 ## Development notes
 
-- Edit `src/*`, never hand-edit `dist/*`.
-- Run `bun run build` after source changes.
+- Edit backend/plugin code under `src/*` and React dashboard code under `web-ui/*`.
+- Never hand-edit `dist/*`; run `bun run build` after either source tree changes.
+- Build before dashboard smoke tests so they inspect the current generated bundle.
 - Keep manual/live tests sandboxed (temp HOME/store/auth paths).
 
 ## Release flow
@@ -508,15 +628,17 @@ Use `codextesting.md` for the Codex CLI live-testing checklist and copy-paste co
 bun pm pkg set version=X.Y.Z
 bun install --lockfile-only
 bun run lint
-bun test
 bun run build
+bun test
 bun audit
 git diff --exit-code -- dist
+npm pack --dry-run
 ```
 
 - Commit and push the version/build changes, then create the matching tag:
 
 ```bash
+git add package.json bun.lock dist
 git commit -m "chore: release vX.Y.Z"
 git push origin main
 git tag -a vX.Y.Z -m "vX.Y.Z"

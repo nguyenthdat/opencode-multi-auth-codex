@@ -1,303 +1,209 @@
-# OpenCode Setup (1:1 with guard22)
+# OpenCode Setup (Current 1:1 Stack)
 
-This is a newcomer-friendly guide to set up OpenCode with the same stack I use:
+This guide installs the current `@nguyenthdat/opencode-multi-auth-codex`
+package for OpenCode. It replaces the former `@nguyenthdat`-specific setup, old
+package paths, and GPT-5.2-to-5.3 mapping instructions.
 
-- Multi-account **ChatGPT OAuth** rotation for Codex (this plugin)
-- Codex Token Dashboard (web UI) for accounts/tokens/quotas
-- Antigravity auth (Gemini/Claude through OpenCode) for background agents
-- Oh My OpenCode (agent harness + extra tooling)
-- MCP servers (Chrome DevTools, Firecrawl)
-
-The goal: after you finish, OpenCode feels "ready" and fast to use.
+For the complete option reference, use `README.md`. Third-party plugins such as
+Antigravity or agent harnesses are optional and are not configured or versioned
+by this repository.
 
 ## What You Get
 
-- OpenCode Desktop + `opencode-cli` working
-- Multiple ChatGPT Plus/Pro accounts added, automatic rotation
-- Selecting **GPT-5.2 Codex** in OpenCode can still use **Codex 5.3** via backend mapping (until OpenCode lists 5.3 natively)
-- A web dashboard to inspect accounts, refresh tokens, refresh quotas, add/remove accounts, notes/tags
+- Multiple ChatGPT/Codex OAuth accounts with local rotation.
+- OpenCode TUI account controls through `/codex`.
+- A responsive React 19 dashboard for accounts, quotas, routing, and logs.
+- Account enable/disable, targeted re-auth, tags, notes, and Force Mode.
+- Rotation strategies: `round-robin`, `least-used`, `random`, and
+  `weighted-round-robin`.
 
-## Requirements (macOS)
+## Requirements
 
-You need:
-
-- OpenCode Desktop installed (includes `opencode-cli`)
-- Node.js installed (for MCP tools like `npx ...`)
-- Bun installed (OpenCode uses Bun for plugin installs)
-
-Quick checks:
+- Bun 1.3 or newer.
+- OpenCode CLI 1.18.4 or newer.
+- ChatGPT/Codex accounts you own or are authorized to operate.
 
 ```bash
-node -v
-bun -v
-ls /Applications/OpenCode.app/Contents/MacOS/opencode-cli
+bun --version
+opencode --version
 ```
 
-If Node/Bun are missing, install them first.
+## Install the OpenCode Plugin
 
-## Install This Plugin
-
-Install this repo into OpenCode's config directory:
+Install the current npm package into OpenCode:
 
 ```bash
-bun add github:guard22/opencode-multi-auth-codex#v1.0.9 --cwd ~/.config/opencode
+opencode plugin @nguyenthdat/opencode-multi-auth-codex@latest --global
 ```
 
-If you prefer tracking `main` (not recommended for beginners):
+Restart OpenCode after installation. Run `/codex` or open the command palette
+and select **Codex accounts**.
 
-```bash
-bun add github:guard22/opencode-multi-auth-codex --cwd ~/.config/opencode
-```
-
-## Optional Plugins (Same Stack)
-
-These are optional but part of the "1:1" setup I use.
-
-### Antigravity Auth
-
-```bash
-bun add opencode-antigravity-auth@1.4.5 --cwd ~/.config/opencode
-```
-
-### Oh My OpenCode
-
-```bash
-bun add oh-my-opencode@3.1.6 --cwd ~/.config/opencode
-```
-
-## Create the OpenCode Config
-
-Edit (or create) this file:
-
-- `~/.config/opencode/opencode.json`
-
-Below is a known-good baseline.
-
-Important:
-
-- Replace placeholders like `PASTE_FIRECRAWL_API_KEY_HERE` with your value.
-- Replace `YOUR_USER` with your macOS username.
-- Do not share this file if it contains secrets.
+Config-based installation is also supported:
 
 ```json
 {
-  "$schema": "https://opencode.ai/config.json",
-
-  "plugin": [
-    "oh-my-opencode@3.1.6",
-    "opencode-antigravity-auth@1.4.5",
-
-    "file:///Users/YOUR_USER/.config/opencode/node_modules/@guard22/opencode-multi-auth-codex/dist/index.js"
-  ],
-
-  "permission": {
-    "delegate_task": "allow",
-    "task": { "*": "allow" },
-    "skill": { "*": "allow" }
-  },
-
-  "compaction": {
-    "auto": true,
-    "prune": true
-  },
-
-  "model": "google/antigravity-gemini-3-pro-high",
-
-  "provider": {
-    "openai": {
-      "options": {
-        "reasoningEffort": "medium",
-        "reasoningSummary": "auto",
-        "textVerbosity": "medium",
-        "include": ["reasoning.encrypted_content"],
-        "store": false
-      },
-
-      "models": {
-        "gpt-5.2": {
-          "name": "GPT-5.2",
-          "limit": { "context": 272000, "output": 128000 },
-          "modalities": { "input": ["text", "image"], "output": ["text"] }
-        },
-
-        "gpt-5.2-codex-medium": {
-          "name": "GPT 5.2 Codex Medium (OAuth)",
-          "limit": { "context": 400000, "output": 128000 },
-          "modalities": { "input": ["text", "image"], "output": ["text"] },
-          "options": {
-            "reasoningEffort": "medium",
-            "reasoningSummary": "auto",
-            "textVerbosity": "medium",
-            "include": ["reasoning.encrypted_content"],
-            "store": false
-          }
-        },
-
-        "gpt-5.2-codex-high": {
-          "name": "GPT 5.2 Codex High (OAuth)",
-          "limit": { "context": 400000, "output": 128000 },
-          "modalities": { "input": ["text", "image"], "output": ["text"] },
-          "options": {
-            "reasoningEffort": "high",
-            "reasoningSummary": "detailed",
-            "textVerbosity": "medium",
-            "include": ["reasoning.encrypted_content"],
-            "store": false
-          }
-        }
-      }
-    },
-
-    "google": {
-      "models": {
-        "antigravity-gemini-3-pro-high": {
-          "name": "Gemini 3 Pro High (Antigravity)",
-          "limit": { "context": 250000, "output": 65535 },
-          "modalities": { "input": ["text", "image", "pdf"], "output": ["text"] }
-        },
-        "gemini-3-flash": {
-          "name": "Gemini 3 Flash (Antigravity)",
-          "limit": { "context": 250000, "output": 65536 },
-          "modalities": { "input": ["text", "image", "pdf"], "output": ["text"] }
-        },
-        "claude-opus-4-5-thinking-high": {
-          "name": "Claude Opus 4.5 Thinking High (Antigravity)",
-          "limit": { "context": 200000, "output": 64000 },
-          "modalities": { "input": ["text", "image", "pdf"], "output": ["text"] }
-        }
-      }
-    }
-  },
-
-  "mcp": {
-    "chrome-devtools": {
-      "type": "local",
-      "command": ["npx", "-y", "chrome-devtools-mcp@latest", "--channel", "stable"],
-      "enabled": true
-    },
-
-    "firecrawl-mcp": {
-      "type": "local",
-      "command": ["npx", "-y", "firecrawl-mcp"],
-      "environment": {
-        "FIRECRAWL_API_KEY": "PASTE_FIRECRAWL_API_KEY_HERE"
-      },
-      "enabled": true
-    }
-  }
+  "plugin": ["@nguyenthdat/opencode-multi-auth-codex@latest"]
 }
 ```
 
-## Add Codex Accounts (Multi-Account OAuth)
+Do not use the former `@guard22` filesystem path or the old
+`github:guard22/...#v1.0.9` reference.
 
-You can add accounts via OpenCode UI or via this plugin CLI.
+## Install the Shell Command
 
-### Option A: OpenCode UI
-
-In OpenCode:
-
-- Providers / Auth
-- OpenAI
-- Choose **"ChatGPT OAuth (Multi-Account)"**
-- Enter an alias (e.g. `acc1`, `work`, `backup`)
-- Complete login in your browser
-
-Repeat for each account.
-
-### Option B: Plugin CLI
+The OpenCode plugin installer does not guarantee that the package CLI is on
+your shell `PATH`. Install the package globally when you also want the
+`opencode-multi-auth` command:
 
 ```bash
-node ~/.config/opencode/node_modules/@guard22/opencode-multi-auth-codex/dist/cli.js add acc1
-node ~/.config/opencode/node_modules/@guard22/opencode-multi-auth-codex/dist/cli.js add acc2
-node ~/.config/opencode/node_modules/@guard22/opencode-multi-auth-codex/dist/cli.js status
+bun add --global @nguyenthdat/opencode-multi-auth-codex@latest
+export PATH="$HOME/.bun/bin:$PATH"
+opencode-multi-auth --help
 ```
 
-Account store file:
+## Add and Manage Accounts
 
-- `~/.config/opencode-multi-auth/accounts.json`
+Use the TUI:
 
-Security note:
+```text
+/codex
+```
 
-- Treat it like a password vault. It contains refresh tokens.
-
-## Codex 5.3 Mapping (How to Use the Newest Codex)
-
-OpenCode may not list `openai/gpt-5.3-codex` yet. This plugin can still use it.
-
-Default behavior:
-
-- If you select `openai/gpt-5.2-codex` (or `openai/gpt-5-codex`), the plugin will send requests as `gpt-5.3-codex`.
-
-Env vars:
-
-- `OPENCODE_MULTI_AUTH_PREFER_CODEX_LATEST=0` disables mapping.
-- `OPENCODE_MULTI_AUTH_CODEX_LATEST_MODEL=gpt-5.3-codex` overrides target.
-- `OPENCODE_MULTI_AUTH_DEBUG=1` prints mapping logs.
-
-### Verify mapping works
+Or use the CLI:
 
 ```bash
-OPENCODE_MULTI_AUTH_DEBUG=1 \
-OPENCODE_MULTI_AUTH_CODEX_LATEST_MODEL=gpt-5.3-codex \
-/Applications/OpenCode.app/Contents/MacOS/opencode-cli run \
-  -m openai/gpt-5.2-codex "Reply ONLY with OK." \
-  --print-logs --log-level INFO
+opencode-multi-auth add personal
+opencode-multi-auth add work
+opencode-multi-auth status
 ```
 
-Expected:
+The default account store is:
 
-- log contains `model map: gpt-5.2-codex -> gpt-5.3-codex`
-- response is `OK`
+```text
+~/.config/opencode-multi-auth/accounts.json
+```
 
-## Web Dashboard
+Treat the store as sensitive. It contains OAuth credentials and is written with
+restricted file permissions.
 
-Start local dashboard:
+## React Dashboard
+
+Start the dashboard on loopback only:
 
 ```bash
-node ~/.config/opencode/node_modules/@guard22/opencode-multi-auth-codex/dist/cli.js web --host 127.0.0.1 --port 3434
+opencode-multi-auth web --host 127.0.0.1 --port 3434
 ```
 
-Open:
+Open `http://127.0.0.1:3434`.
 
-- `http://127.0.0.1:3434`
+The dashboard supports:
 
-What it's for:
+- live account, store, auth, and sync status
+- quota windows, confidence state, history sparklines, search, filters, and sort
+- token and limits refresh operations
+- account add, remove, enable/disable, targeted re-auth, tags, and notes
+- Force Mode and rotation strategy selection
+- optional saved-credential auto-login controls
+- local runtime logs
 
-- See all accounts
-- Refresh tokens
-- Refresh limits/quotas (active or all accounts)
-- Add/remove accounts
-- Notes/tags
-- Basic logs
+Saved credentials default to
+`~/.config/opencode-multi-auth/credentials.json`. Override the file with
+`OPENCODE_MULTI_AUTH_AUTO_LOGIN_CREDENTIALS_FILE` when using a source-checkout
+fixture such as `auto-login/credentials.json`.
+
+The dashboard is a bundled React 19 SPA:
+
+```text
+web-ui/main.tsx          React components and state
+web-ui/dashboard.css     responsive dark theme
+src/web.ts               HTTP shell, static assets, security checks, and APIs
+dist/web-ui/             generated dashboard.js, dashboard.css, and source map
+```
+
+The package does not load React or fonts from a CDN at runtime.
+
+## Build from Source
+
+```bash
+git clone https://github.com/nguyenthdat/opencode-multi-auth-codex.git
+cd opencode-multi-auth-codex
+bun install --frozen-lockfile
+bun run lint
+bun run build
+bun test
+```
+
+Start the locally built dashboard:
+
+```bash
+bun dist/cli.js web --host 127.0.0.1 --port 3434
+```
+
+Edit backend/plugin code under `src/` and dashboard code under `web-ui/`. Never
+hand-edit `dist/`; regenerate it with `bun run build`.
+
+## Current Model Support
+
+The plugin exposes the current GPT-5.6 family when runtime model injection is
+enabled:
+
+- `gpt-5.6-sol`
+- `gpt-5.6-terra`
+- `gpt-5.6-luna`
+
+Reasoning levels are OpenCode variants, not separate model IDs. Current
+variants include `none`, `low`, `medium`, `high`, `xhigh`, `max`, and `fast`.
+
+If an OpenCode build rejects a new model before plugin configuration is
+applied, select a previously accepted model and explicitly enable latest-model
+mapping:
+
+```bash
+export OPENCODE_MULTI_AUTH_PREFER_CODEX_LATEST=1
+```
+
+Disable runtime model injection only when intentionally required:
+
+```bash
+export OPENCODE_MULTI_AUTH_INJECT_MODELS=0
+```
+
+## Dashboard Security Boundary
+
+- Binding is restricted to `127.0.0.1`, `::1`, or `localhost`.
+- Host and browser Origin headers must match a loopback authority and dashboard
+  port.
+- The dashboard has no login screen or bearer-token authentication.
+- Any local process that can reach the port may call its APIs.
+- Do not expose it through a public bind, reverse proxy, or tunnel.
+- `/api/state` removes OAuth access, refresh, and ID tokens before responding.
+
+See `SECURITY.md` for the complete local threat model.
 
 ## Troubleshooting
 
-### "No available accounts"
+### No available accounts
 
-Rotation found zero usable accounts (expired/invalid/rate-limited).
+- Open `/codex` or the dashboard and inspect disabled/error accounts.
+- Re-authenticate the affected alias.
+- Refresh tokens and limits.
+- Wait for known cooldown or quota reset windows.
 
-Fix:
+### Dashboard asset is missing
 
-- Open dashboard and look for ERROR badges.
-- Re-auth the failing account.
-- Add more accounts, or wait for cooldown.
-
-### 401 / "token invalidated" / "Token refresh failed"
-
-This is almost always account-level.
-
-Fix:
-
-- Re-login that specific alias.
-
-### Check plugin loading
+Run a clean source build and confirm the package assets exist:
 
 ```bash
-/Applications/OpenCode.app/Contents/MacOS/opencode-cli debug config --print-logs
+bun run build
+ls dist/web-ui/dashboard.js dist/web-ui/dashboard.css
 ```
 
-You should see entries like:
+### Plugin does not load
 
-- `... opencode-multi-auth-codex ... loading plugin`
-- `... opencode-antigravity-auth ... loading plugin`
-- `... oh-my-opencode ... loading plugin`
+```bash
+opencode debug config --print-logs
+```
+
+Confirm the active plugin reference uses
+`@nguyenthdat/opencode-multi-auth-codex` and restart OpenCode.

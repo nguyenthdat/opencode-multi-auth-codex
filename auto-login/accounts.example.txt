@@ -1,0 +1,6 @@
+|email|password|2mfa secret key|
+|your-email-1@example.com|your-chatgpt-password-1|JBSWY3DPEHPK3PXP|
+|your-email-2@example.com|your-chatgpt-password-2|JBSWY3DPEHPK3PXP|
+
+# Optional row numbers are accepted too:
+3. |your-email-3@example.com|your-chatgpt-password-3|JBSWY3DPEHPK3PXP|

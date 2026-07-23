@@ -1,7 +1,9 @@
 # Comprehensive Production Readiness Report
 
 > Historical snapshot: this report reflects readiness status during an intermediate phase.
-> Use `README.md` and `docs/PHASE_H_VALIDATION.md` as the current source of truth.
+> This report predates the React dashboard and does not validate `web-ui/` or
+> `dist/web-ui/`. Use `README.md` and `TEST_EXECUTION_PLAN.md` for current
+> behavior and validation requirements.
 
 **Date:** 2026-02-22  
 **Project:** OpenCode Multi-Auth Codex  

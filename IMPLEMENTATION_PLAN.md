@@ -1,18 +1,56 @@
 # OpenCode Multi-Auth Reliability Upgrade Plan
 
+> Historical implementation plan. Repository paths, package ownership, model
+> names, checkboxes, and test counts below preserve the original phased plan.
+> They are not current release status. Use `README.md`, `SECURITY.md`,
+> `TEST_EXECUTION_PLAN.md`, and `codextesting.md` for current behavior and
+> validation.
+>
+> React migration addendum (2026-07-23): dashboard presentation moved from
+> inline HTML/CSS/DOM code in `src/web.ts` to a React 19 SPA under `web-ui/`.
+> `src/web.ts` now owns the HTTP shell, static asset routing, request security,
+> and APIs. `bun run build` emits frontend artifacts under `dist/web-ui/`.
+
 ## 1. Objective
-Upgrade `guard22/opencode-multi-auth-codex` so it is reliable and low-maintenance for daily use, with strict pre-promotion validation.
+Upgrade `nguyenthdat/opencode-multi-auth-codex` so it is reliable and low-maintenance for daily use, with strict pre-promotion validation.
 
 Primary goal: multi-account Codex linking + rotation that just works.
 
 ## 1.1 Repository Location Requirement
 - Repository location for implementation and tests:
-  - `/Users/jorgitin/Documents/projects/open_multi_auth`
+  - `/Users/<username>/Documents/projects/open_multi_auth`
 
 ## 1.2 Baseline and Scope
-- Baseline upstream: `https://github.com/floze-the-genius/opencode-multi-auth-codex`
+- Baseline upstream: `https://github.com/nguyenthdat/opencode-multi-auth-codex`
 - This work is a hardening/improvement pass on upstream plus custom behavior changes.
-- Implement in source TypeScript (`src/*`), tests, and docs. Do not hand-edit `dist/*` for release.
+- Current source changes belong in `src/*`, `web-ui/*`, tests, and docs. Do not
+  hand-edit `dist/*`; regenerate backend and React artifacts with
+  `bun run build`.
+
+## 1.6 Current Dashboard Architecture Addendum
+
+```text
+web-ui/main.tsx + web-ui/dashboard.css
+  -> bun run build
+  -> dist/web-ui/dashboard.js + dashboard.css + dashboard.js.map
+
+src/web.ts
+  -> HTML root shell
+  -> static asset serving
+  -> loopback Host/Origin validation and CSP
+  -> /api/* routes
+```
+
+Current dashboard verification is split deliberately:
+
+- `tests/web-headless/dashboard-smoke.test.ts` is HTTP/asset smoke; it does not
+  execute React in a browser.
+- Browser interactions, modal focus, and responsive layout require the manual
+  checks in `codextesting.md` until a browser E2E suite is added.
+- `test:soak:48h` is currently a short scaffold and is not evidence of a
+  completed 48-hour soak.
+- The unchecked items in the original phase packets remain historical planning
+  state and should not be interpreted as the current implementation inventory.
 
 ## 1.3 Custom Changes Included
 - Account-level re-auth from dashboard/API.
@@ -550,6 +588,12 @@ Primary goal: multi-account Codex linking + rotation that just works.
 - [ ] QA entry in `docs/QA.md` with specific test commands and results.
 
 ## Phase H: Full Validation Matrix (Reliability + Security)
+
+> Historical promotion gate. The dashboard-specific headless items below were
+> written for the former inline UI. Current automated coverage verifies the
+> shell and generated assets; use `TEST_EXECUTION_PLAN.md` for the post-React
+> split between automation, manual browser checks, and true long-duration soak.
+
 ### Todos
 - [ ] L0 Build/Type gates:
   - [ ] `bun install --frozen-lockfile`
@@ -601,8 +645,8 @@ Primary goal: multi-account Codex linking + rotation that just works.
 ## Phase I: Docs, Promotion, and Rollback Readiness
 ### Todos
 - [ ] Rewrite `README.md` (simple install/use).
-- [ ] Update `docs/TESTING.md` with exact commands.
-- [ ] Update `docs/OFFLINE_RECOVERY.md`.
+- [ ] Keep `TEST_EXECUTION_PLAN.md` current with exact commands and coverage boundaries.
+- [ ] Keep recovery and sandbox procedures current in `README.md` and `SANDBOX_QUICK_REF.md`.
 - [ ] Update `docs/QA.md` troubleshooting matrix.
 - [ ] Keep `TEST_EXECUTION_PLAN.md` current with scripts and gate order.
 - [ ] Promotion steps:
@@ -619,10 +663,10 @@ Primary goal: multi-account Codex linking + rotation that just works.
 **L1: Documentation Completeness**
 - [ ] Doc review: `README.md` includes simple install/use instructions
 - [ ] Doc review: `README.md` includes quickstart example
-- [ ] Doc review: `docs/TESTING.md` lists all exact test commands
-- [ ] Doc review: `docs/TESTING.md` explains test execution order
-- [ ] Doc review: `docs/OFFLINE_RECOVERY.md` covers store corruption recovery
-- [ ] Doc review: `docs/OFFLINE_RECOVERY.md` covers auth file recovery
+- [ ] Doc review: `TEST_EXECUTION_PLAN.md` lists all exact test commands
+- [ ] Doc review: `TEST_EXECUTION_PLAN.md` explains test execution order
+- [ ] Doc review: `README.md` and `SANDBOX_QUICK_REF.md` cover store corruption recovery
+- [ ] Doc review: `README.md` and `SANDBOX_QUICK_REF.md` cover auth file recovery
 - [ ] Doc review: `docs/QA.md` includes troubleshooting matrix
 - [ ] Doc review: `docs/QA.md` includes all test execution results
 - [ ] Doc review: `TEST_EXECUTION_PLAN.md` matches actual test scripts
@@ -712,9 +756,15 @@ Primary goal: multi-account Codex linking + rotation that just works.
 - `src/auth.ts`
 - `src/codex-auth.ts`
 - `src/logger.ts`
-- `test/` (unit + integration + stress + recovery + headless)
+- `web-ui/main.tsx`
+- `web-ui/dashboard.css`
+- `web-ui/tsconfig.json`
+- `tests/` (unit + integration + web asset smoke + failure + stress + sandbox + soak scaffold)
+- `dist/web-ui/` (generated by `bun run build`, never hand-edit)
 - `README.md`
-- `docs/TESTING.md`
-- `docs/OFFLINE_RECOVERY.md`
+- `SECURITY.md`
+- `CONTRIBUTING.md`
+- `SANDBOX_QUICK_REF.md`
+- `codextesting.md`
 - `docs/QA.md`
 - `TEST_EXECUTION_PLAN.md`

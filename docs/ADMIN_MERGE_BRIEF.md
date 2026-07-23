@@ -1,5 +1,9 @@
 # Admin Merge Brief
 
+> Historical pre-React merge brief. UI source locations, bundle paths, test
+> counts, and verification results below describe that patch at the time. The
+> current UI lives in `web-ui/` and builds to `dist/web-ui/`.
+
 ## Summary
 
 This update hardens account rotation behavior and dashboard controls for multi-account Codex usage:
@@ -74,4 +78,3 @@ Live checks performed against local dashboard (`127.0.0.1:3434`):
 2. `src/rotation.ts` and `src/force-mode.ts`: strict force semantics and runtime strategy path.
 3. `src/settings.ts`: runtime settings precedence and sync semantics.
 4. `src/web.ts`: strategy/force UI placement and tooltip copy.
-

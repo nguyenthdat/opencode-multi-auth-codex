@@ -1,7 +1,9 @@
 # QA Documentation - OpenCode Multi-Auth
 
 > Historical phase log: this document tracks QA progress across phases and includes baseline snapshots.
-> For current behavior and final readiness, use `README.md` and `docs/PHASE_H_VALIDATION.md`.
+> Dashboard references to `src/web.ts` describe the former inline UI and predate
+> the React 19 migration. For current behavior and validation, use `README.md`
+> and `TEST_EXECUTION_PLAN.md`.
 
 ## Phase A: Repository Bootstrap + Baseline Capture
 

@@ -88,13 +88,27 @@ describe('dashboard headless smoke', () => {
       await once(server, 'listening')
       const response = await fetch(`http://127.0.0.1:${port}/`)
       expect(response.status).toBe(200)
+      expect(response.headers.get('content-security-policy')).toContain("script-src 'self'")
 
       const html = await response.text()
-      const scriptMatch = html.match(/<script>([\s\S]*?)<\/script>/)
-      expect(scriptMatch).toBeTruthy()
+      expect(html).toContain('<div id="root"></div>')
+      expect(html).toContain('<script type="module" src="/dashboard.js"></script>')
+      expect(html).toContain('<link rel="stylesheet" href="/dashboard.css" />')
 
-      const scriptContent = scriptMatch?.[1] || ''
-      expect(() => new Function(scriptContent)).not.toThrow()
+      const scriptResponse = await fetch(`http://127.0.0.1:${port}/dashboard.js`)
+      expect(scriptResponse.status).toBe(200)
+      expect(scriptResponse.headers.get('content-type')).toContain('text/javascript')
+      const script = await scriptResponse.text()
+      expect(script.length).toBeGreaterThan(10_000)
+      expect(script).toContain('Dashboard root element not found')
+      expect(script).toContain('Codex account control')
+
+      const styleResponse = await fetch(`http://127.0.0.1:${port}/dashboard.css`)
+      expect(styleResponse.status).toBe(200)
+      expect(styleResponse.headers.get('content-type')).toContain('text/css')
+      const styles = await styleResponse.text()
+      expect(styles).toContain('.account-card')
+      expect(styles).not.toContain('fonts.googleapis.com')
     } finally {
       await closeServer(server)
       fs.unwatchFile(getCodexAuthPath())

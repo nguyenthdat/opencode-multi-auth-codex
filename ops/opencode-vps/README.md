@@ -1,5 +1,10 @@
 # OpenCode VPS Hardening Notes (Safari + HTTP)
 
+> Scope: these notes apply to the upstream OpenCode browser application, not
+> this plugin's localhost React dashboard. Do not apply hashed `session-*.js` or
+> `assets/index-*.js` patching procedures to `dist/web-ui/dashboard.js` or
+> `dashboard.css`. Remote exposure of the plugin dashboard is unsupported.
+
 This repo is a *plugin*, but we keep VPS ops notes here because these issues are easy
 to forget and painful to rediscover.
 
@@ -44,4 +49,3 @@ Files in this folder:
   - `journalctl -u opencode --no-pager | rg -n \"OOM killer|oom-kill\"`
 - If a session is "stuck loading", a quick mitigation is opening in a private tab.
   A proper mitigation is `no-store` on the session chunk route as described above.
-

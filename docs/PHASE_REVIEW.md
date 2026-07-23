@@ -1,7 +1,9 @@
 # Comprehensive Phase Review Report
 
 > Historical snapshot: this report captures an intermediate state during phased delivery.
-> Current behavior/readiness references are `README.md` and `docs/PHASE_H_VALIDATION.md`.
+> UI/CSS references to `src/web.ts` predate the React 19 migration. Current
+> behavior and validation references are `README.md` and
+> `TEST_EXECUTION_PLAN.md`.
 
 **Date:** 2026-02-22
 **Status:** Review Complete
