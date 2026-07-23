@@ -1,4 +1,4 @@
-# opencode-multi-auth-codex
+# OpenCode Multi Codex OAuth Manager
 
 Open-source account routing and reliability tooling for OpenCode's Codex OAuth
 integration. It provides local session controls, a localhost dashboard,
@@ -22,7 +22,7 @@ configurable routing, limit visibility, and failure recovery.
 
 - Rotates requests across multiple ChatGPT/Codex OAuth accounts.
 - Keeps a local account store with migration, validation, and atomic writes.
-- Provides a localhost dashboard to manage accounts and limits.
+- Provides OpenCode TUI controls and a localhost dashboard to manage accounts and limits.
 - Supports force mode (pin one alias), account enable/disable, and re-auth.
 - Supports settings-driven rotation strategy (`round-robin`, `least-used`, `random`, `weighted-round-robin`).
 - Probes limits safely and keeps authoritative data quality rules.
@@ -77,18 +77,31 @@ configurable routing, limit visibility, and failure recovery.
 ## Requirements
 
 - Bun 1.3+
-- OpenCode CLI
+- OpenCode CLI 1.18.4+
 - ChatGPT/Codex OAuth accounts
 
 ## Install and use
 
 ### Plugin install (recommended)
 
-Install from npm:
+Install both the OpenCode server and TUI targets from npm:
 
 ```bash
 opencode plugin @nguyenthdat/opencode-multi-auth-codex@latest --global
 ```
+
+Quit and restart OpenCode after installation. In the OpenCode TUI, run `/multi-auth`
+or open the command palette and select **Multi-auth accounts**. The TUI supports:
+
+- listing account status, plan, quota, and health
+- adding an account through browser OAuth
+- re-authenticating accounts and refreshing OAuth tokens
+- checking one account or all accounts
+- selecting the account stored in the device Codex `auth.json`
+- enabling/disabling an account
+- editing account tags and notes
+- forcing one account for up to 24 hours or returning to rotation
+- removing an account from the local store
 
 If you prefer config-based installation, OpenCode also supports:
 
@@ -101,6 +114,37 @@ If you prefer config-based installation, OpenCode also supports:
 Package:
 - npm: [@nguyenthdat/opencode-multi-auth-codex](https://www.npmjs.com/package/@nguyenthdat/opencode-multi-auth-codex)
 - repo: [nguyenthdat/opencode-multi-auth-codex](https://github.com/nguyenthdat/opencode-multi-auth-codex)
+
+### Install the CLI command
+
+`opencode plugin ...` installs the plugin into OpenCode's package cache, but it
+does not add the package binary to your shell `PATH`. Install the package globally
+when you also want commands such as `opencode-multi-auth add personal`:
+
+```bash
+bun add --global @nguyenthdat/opencode-multi-auth-codex@latest
+```
+
+If Bun's global binary directory is not already on `PATH`:
+
+```bash
+export PATH="$HOME/.bun/bin:$PATH"
+```
+
+Verify the command and add an account:
+
+```bash
+command -v opencode-multi-auth
+opencode-multi-auth --help
+opencode-multi-auth add personal
+```
+
+npm can be used instead of Bun:
+
+```bash
+npm install --global @nguyenthdat/opencode-multi-auth-codex@latest
+opencode-multi-auth add personal
+```
 
 ### GitHub source install (fallback)
 
@@ -153,6 +197,9 @@ bun run build
 ### Quick start
 
 ```bash
+# Install the shell command if you have only run `opencode plugin` so far
+bun add --global @nguyenthdat/opencode-multi-auth-codex@latest
+
 # Add accounts
 opencode-multi-auth add personal
 opencode-multi-auth add work
@@ -165,6 +212,9 @@ opencode-multi-auth web --host 127.0.0.1 --port 3434
 ```
 
 Open `http://127.0.0.1:3434`.
+
+Alternatively, restart OpenCode and run `/multi-auth` to manage and check accounts
+without leaving the OpenCode TUI.
 
 ## Automated Bulk Login (Outlook)
 
@@ -274,6 +324,11 @@ Outlook login often shows interstitial pages after password entry:
 - **Stale OTP codes**: if the inbox has old verification emails, the script may pick up an expired code. Clear the inbox or wait for a fresh email.
 
 ## CLI commands
+
+Install the binary first with
+`bun add --global @nguyenthdat/opencode-multi-auth-codex@latest` (or the npm
+equivalent above). Installing only through `opencode plugin` does not expose the
+CLI binary on your shell `PATH`.
 
 - `opencode-multi-auth add <alias>` -> add account via OAuth
 - `opencode-multi-auth remove <alias>` -> remove account
