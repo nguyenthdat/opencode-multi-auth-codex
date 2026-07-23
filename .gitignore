@@ -13,3 +13,4 @@ auto-login/debug_*.png
 auto-login/__pycache__/
 .cloakbrowser-artifacts/
 .venv/
+.qdrant/
