@@ -552,10 +552,11 @@ const tui: TuiPlugin = async (api, options) => {
     commands: [
       {
         name: 'multi-auth.accounts',
-        title: 'Multi-auth accounts',
-        desc: 'Manage OpenAI accounts and check quota/health',
-        category: 'Multi Auth',
+        title: 'Manage Codex accounts',
+        desc: 'Manage Codex OAuth accounts and check quota/health',
+        category: 'Codex Accounts',
         namespace: 'palette',
+        suggested: true,
         slashName: 'multi-auth',
         run() {
           showAccounts(api)
@@ -563,9 +564,9 @@ const tui: TuiPlugin = async (api, options) => {
       },
       {
         name: 'multi-auth.add',
-        title: 'Multi-auth: add account',
-        desc: 'Add an OpenAI account using browser OAuth',
-        category: 'Multi Auth',
+        title: 'Add Codex account',
+        desc: 'Add a Codex OAuth account using browser authentication',
+        category: 'Codex Accounts',
         namespace: 'palette',
         slashName: 'multi-auth-add',
         run() {

@@ -37,8 +37,17 @@ describe('OpenCode TUI plugin', () => {
     expect(plugin.id).toBe('@nguyenthdat/opencode-multi-auth-codex')
     expect(layers).toHaveLength(1)
     expect(layers[0].commands).toEqual(expect.arrayContaining([
-      expect.objectContaining({ name: 'multi-auth.accounts', slashName: 'multi-auth' }),
-      expect.objectContaining({ name: 'multi-auth.add', slashName: 'multi-auth-add' })
+      expect.objectContaining({
+        name: 'multi-auth.accounts',
+        title: 'Manage Codex accounts',
+        suggested: true,
+        slashName: 'multi-auth'
+      }),
+      expect.objectContaining({
+        name: 'multi-auth.add',
+        title: 'Add Codex account',
+        slashName: 'multi-auth-add'
+      })
     ]))
   })
 

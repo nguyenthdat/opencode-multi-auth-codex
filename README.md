@@ -91,7 +91,8 @@ opencode plugin @nguyenthdat/opencode-multi-auth-codex@latest --global
 ```
 
 Quit and restart OpenCode after installation. In the OpenCode TUI, run `/multi-auth`
-or open the command palette and select **Multi-auth accounts**. The TUI supports:
+or open the command palette and select **Manage Codex accounts** from the
+**Suggested** section. The TUI supports:
 
 - listing account status, plan, quota, and health
 - adding an account through browser OAuth
