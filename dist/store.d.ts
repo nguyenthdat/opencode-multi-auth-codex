@@ -10,6 +10,17 @@ export declare function getStoreDiagnostics(): {
     error: string | null;
 };
 export declare function addAccount(alias: string, creds: Omit<AccountCredentials, 'alias' | 'usageCount'>): AccountStore;
+export type ExistingEmailPolicy = 'allow' | 'reject' | 'update';
+export declare class AccountEmailExistsError extends Error {
+    readonly alias: string;
+    readonly code = "AUTO_LOGIN_ACCOUNT_EXISTS";
+    constructor(alias: string);
+}
+export declare class AccountEmailMismatchError extends Error {
+    readonly code = "AUTO_LOGIN_EMAIL_MISMATCH";
+    constructor();
+}
+export declare function saveAuthenticatedAccount(alias: string, creds: Omit<AccountCredentials, 'alias' | 'usageCount'>, existingEmailPolicy?: ExistingEmailPolicy, expectedEmail?: string): AccountStore;
 export declare function removeAccount(alias: string): AccountStore;
 export declare function updateAccount(alias: string, updates: Partial<AccountCredentials>): AccountStore;
 export declare function setActiveAlias(alias: string | null): AccountStore;

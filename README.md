@@ -344,9 +344,13 @@ uv run playwright install chromium
 uv run python auto-login/auto_login.py \
   --credentials-file auto-login/accounts.txt --check
 
-# Login all enabled accounts with CloakBrowser
+# Login enabled accounts not already present in accounts.json
 uv run python auto-login/auto_login.py \
   --credentials-file auto-login/accounts.txt --browser cloak
+
+# Explicitly refresh accounts whose normalized email already exists
+uv run python auto-login/auto_login.py \
+  --credentials-file auto-login/accounts.txt --browser cloak --force
 
 # Login a specific account by index
 uv run python auto-login/auto_login.py \
@@ -376,6 +380,10 @@ accounts from the former
 `~/.config/opencode/opencode-multi-auth-codex-accounts.json` array store are
 merged by normalized email. For an encrypted store, use `/codex`, the plugin
 CLI, or dashboard-assisted auto-login instead of direct Python writes.
+Before opening OAuth, auto-login compares normalized emails against the current
+store and skips matches. Use `--force` only when an existing account's tokens
+must be refreshed. Dashboard-assisted callbacks also require the authenticated
+identity to match the selected credential email before any store write.
 
 ### How it works
 
@@ -469,6 +477,10 @@ CLI binary on your shell `PATH`.
 - `POST /api/settings/preset`
 - `POST /api/antigravity/refresh` (feature-flag gated)
 - `POST /api/antigravity/refresh-all` (feature-flag gated)
+
+Dashboard auto-login endpoints also skip an email already present in the store
+and return `409 AUTO_LOGIN_ACCOUNT_EXISTS`. Send `force: true`, or use the
+dashboard's **Force update** button, to refresh that account explicitly.
 
 ## Environment variables
 

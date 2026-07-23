@@ -8,7 +8,7 @@ import { exec, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createAuthorizationFlow, loginAccount, refreshToken } from './auth.js';
 import { getCodexAuthPath, getCodexAuthStatus, getCodexAuthSummary, resolveAliasForCurrentAuth, syncCodexAuthFile, writeCodexAuthForAlias } from './codex-auth.js';
-import { getStoreStatus, listAccounts, loadStore, removeAccount, updateAccount } from './store.js';
+import { AccountEmailExistsError, getStoreStatus, listAccounts, loadStore, removeAccount, updateAccount } from './store.js';
 import { getRefreshQueueState, startRefreshQueue, stopRefreshQueue } from './refresh-queue.js';
 import { getLogPath, logError, logInfo, readLogTail } from './logger.js';
 import { getForceState, activateForce, clearForce, isForceActive, getRemainingForceTimeMs, formatForceDuration } from './force-mode.js';
@@ -113,6 +113,14 @@ function sendJson(res, status, payload) {
         'Content-Length': Buffer.byteLength(data)
     });
     res.end(data);
+}
+function sendAutoLoginError(res, err) {
+    if (err instanceof AccountEmailExistsError) {
+        sendJson(res, 409, { code: err.code, alias: err.alias, error: err.message });
+        return;
+    }
+    lastLoginError = String(err);
+    sendJson(res, 500, { error: String(err) });
 }
 function scrubAccount(account) {
     const { accessToken, refreshToken, idToken, ...rest } = account;
@@ -344,8 +352,12 @@ function findAutoLoginAccount(config, selector) {
         return null;
     return config.accounts.find((account) => account.email.toLowerCase() === normalized || account.alias.toLowerCase() === normalized) || null;
 }
+function findStoreAccountByEmail(store, email) {
+    const normalized = email.trim().toLowerCase();
+    return Object.values(store.accounts).find((account) => typeof account.email === 'string' && account.email.trim().toLowerCase() === normalized);
+}
 function resolveAutoLoginAlias(store, account) {
-    const existing = Object.values(store.accounts).find((entry) => typeof entry.email === 'string' && entry.email.toLowerCase() === account.email.toLowerCase());
+    const existing = findStoreAccountByEmail(store, account.email);
     if (existing) {
         return existing.alias;
     }
@@ -439,7 +451,7 @@ function startManualLogin(alias) {
         return { ok: true, url: flow.url };
     });
 }
-async function startAutoLogin(selector, visible = false) {
+async function startAutoLogin(selector, visible = false, force = false) {
     if (pendingLogin) {
         throw new Error(`Login already in progress for ${pendingLogin.alias}`);
     }
@@ -455,6 +467,10 @@ async function startAutoLogin(selector, visible = false) {
         throw new Error('Selected auto-login account is disabled');
     }
     const store = loadStore();
+    const existing = findStoreAccountByEmail(store, selected.email);
+    if (existing && !force) {
+        throw new AccountEmailExistsError(existing.alias);
+    }
     const alias = resolveAutoLoginAlias(store, selected);
     const flow = await createAuthorizationFlow();
     setPendingLogin({
@@ -469,7 +485,11 @@ async function startAutoLogin(selector, visible = false) {
     });
     lastLoginError = null;
     let loginSettled = false;
-    const loginPromise = loginAccount(alias, flow, { timeoutMs: AUTO_LOGIN_TIMEOUT_MS })
+    const loginPromise = loginAccount(alias, flow, {
+        timeoutMs: AUTO_LOGIN_TIMEOUT_MS,
+        existingEmailPolicy: force ? 'update' : 'reject',
+        expectedEmail: selected.email
+    })
         .then(() => {
         loginSettled = true;
         stopAutoLoginChild();
@@ -492,6 +512,7 @@ async function startAutoLogin(selector, visible = false) {
         flow.url,
         '--credentials-file',
         config.path,
+        ...(force ? ['--force'] : []),
         ...(visible ? ['--visible'] : [])
     ], {
         stdio: ['ignore', 'pipe', 'pipe']
@@ -541,9 +562,15 @@ async function startAutoLogin(selector, visible = false) {
         url: flow.url
     };
 }
-async function saveAutoLoginAccountAndStart(input) {
+async function saveAutoLoginAccountAndStart(input, force = false) {
+    if (!force) {
+        const existing = findStoreAccountByEmail(loadStore(), input.email);
+        if (existing) {
+            throw new AccountEmailExistsError(existing.alias);
+        }
+    }
     const account = upsertAutoLoginCredentials(input);
-    return startAutoLogin(account.email);
+    return startAutoLogin(account.email, false, force);
 }
 function runSync() {
     try {
@@ -1053,12 +1080,11 @@ export function startWebConsole(options) {
                     return;
                 }
                 try {
-                    const result = await startAutoLogin(selector, body.visible === true);
+                    const result = await startAutoLogin(selector, body.visible === true, body.force === true);
                     sendJson(res, 200, result);
                 }
                 catch (err) {
-                    lastLoginError = String(err);
-                    sendJson(res, 500, { error: String(err) });
+                    sendAutoLoginError(res, err);
                 }
                 return;
             }
@@ -1082,12 +1108,11 @@ export function startWebConsole(options) {
                         password,
                         alias,
                         chatgptPassword
-                    });
+                    }, body.force === true);
                     sendJson(res, 200, result);
                 }
                 catch (err) {
-                    lastLoginError = String(err);
-                    sendJson(res, 500, { error: String(err) });
+                    sendAutoLoginError(res, err);
                 }
                 return;
             }

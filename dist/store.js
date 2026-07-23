@@ -469,6 +469,63 @@ export function addAccount(alias, creds) {
     saveStore(store);
     return store;
 }
+export class AccountEmailExistsError extends Error {
+    alias;
+    code = 'AUTO_LOGIN_ACCOUNT_EXISTS';
+    constructor(alias) {
+        super(`Account email already exists as ${alias}; use force to refresh it`);
+        this.alias = alias;
+        this.name = 'AccountEmailExistsError';
+    }
+}
+export class AccountEmailMismatchError extends Error {
+    code = 'AUTO_LOGIN_EMAIL_MISMATCH';
+    constructor() {
+        super('Authenticated email does not match the selected auto-login credential');
+        this.name = 'AccountEmailMismatchError';
+    }
+}
+export function saveAuthenticatedAccount(alias, creds, existingEmailPolicy = 'allow', expectedEmail) {
+    const store = loadStore();
+    const normalizedEmail = creds.email?.trim().toLowerCase();
+    const normalizedExpectedEmail = expectedEmail?.trim().toLowerCase();
+    if (normalizedExpectedEmail && normalizedEmail !== normalizedExpectedEmail) {
+        throw new AccountEmailMismatchError();
+    }
+    const emailMatch = normalizedEmail
+        ? Object.values(store.accounts).find((account) => account.email?.trim().toLowerCase() === normalizedEmail)
+        : undefined;
+    if (emailMatch && existingEmailPolicy === 'reject') {
+        throw new AccountEmailExistsError(emailMatch.alias);
+    }
+    if (existingEmailPolicy === 'reject' && store.accounts[alias]) {
+        throw new Error(`Account alias already exists: ${alias}`);
+    }
+    const targetAlias = existingEmailPolicy === 'update' && emailMatch
+        ? emailMatch.alias
+        : alias;
+    const existing = store.accounts[targetAlias];
+    const entry = buildHistoryEntry(creds.rateLimits);
+    store.accounts[targetAlias] = existing && existingEmailPolicy === 'update'
+        ? {
+            ...existing,
+            ...creds,
+            alias: targetAlias,
+            usageCount: existing.usageCount,
+            rateLimitHistory: existing.rateLimitHistory
+        }
+        : {
+            ...creds,
+            alias: targetAlias,
+            usageCount: 0,
+            rateLimitHistory: entry ? [entry] : creds.rateLimitHistory
+        };
+    if (!store.activeAlias) {
+        store.activeAlias = targetAlias;
+    }
+    saveStore(store);
+    return store;
+}
 export function removeAccount(alias) {
     const store = loadStore();
     delete store.accounts[alias];

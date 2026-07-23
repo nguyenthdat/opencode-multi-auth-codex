@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import * as http from 'http';
 import * as url from 'url';
-import { addAccount, updateAccount, loadStore } from './store.js';
+import { loadStore, saveAuthenticatedAccount, updateAccount, withWriteLock } from './store.js';
 import { clearAuthInvalid } from './rotation.js';
 import { decodeJwtPayload, getAccountIdFromClaims, getEmailFromClaims, getExpiryFromClaims, getPlanTypeFromClaims } from './codex-auth.js';
 const OPENAI_ISSUER = 'https://auth.openai.com';
@@ -136,6 +136,7 @@ export async function loginAccount(alias, flow, options) {
                 if (!tokens.refresh_token) {
                     throw new Error('Token exchange did not return a refresh_token');
                 }
+                const refreshToken = tokens.refresh_token;
                 const now = Date.now();
                 const accessClaims = decodeJwtPayload(tokens.access_token);
                 const idClaims = tokens.id_token ? decodeJwtPayload(tokens.id_token) : null;
@@ -157,9 +158,9 @@ export async function loginAccount(alias, flow, options) {
                     getAccountIdFromClaims(accessClaims);
                 const planType = getPlanTypeFromClaims(idClaims) ||
                     getPlanTypeFromClaims(accessClaims);
-                const store = addAccount(alias, {
+                const store = await withWriteLock(() => saveAuthenticatedAccount(alias, {
                     accessToken: tokens.access_token,
-                    refreshToken: tokens.refresh_token,
+                    refreshToken,
                     idToken: tokens.id_token,
                     accountId,
                     planType,
@@ -170,13 +171,18 @@ export async function loginAccount(alias, flow, options) {
                     source: 'opencode',
                     authInvalid: false,
                     authInvalidatedAt: undefined
-                });
-                const account = store.accounts[alias];
+                }, options?.existingEmailPolicy, options?.expectedEmail));
+                const account = options?.existingEmailPolicy === 'update' && email
+                    ? Object.values(store.accounts).find((entry) => entry.email?.trim().toLowerCase() === email.trim().toLowerCase()) || store.accounts[alias]
+                    : store.accounts[alias];
+                if (!account) {
+                    throw new Error('Authenticated account was not persisted');
+                }
                 res.writeHead(200, { 'Content-Type': 'text/html' });
                 res.end(`
           <html>
             <body style="font-family: system-ui; padding: 40px; text-align: center;">
-              <h1>Account "${alias}" authenticated!</h1>
+              <h1>Account "${account.alias}" authenticated!</h1>
               <p>${email || 'Unknown email'}</p>
               <p>You can close this window.</p>
             </body>

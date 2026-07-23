@@ -8,6 +8,7 @@ import { once } from 'node:events'
 const SANDBOX_ROOT = path.join(os.tmpdir(), 'oma-web-integration-sandbox')
 const STORE_FILE = path.join(SANDBOX_ROOT, 'accounts.json')
 const AUTH_FILE = path.join(SANDBOX_ROOT, 'auth.json')
+const AUTO_LOGIN_CREDENTIALS_FILE = path.join(SANDBOX_ROOT, 'credentials.json')
 const originalEnv = process.env
 
 let startWebConsole: typeof import('../../src/web.js').startWebConsole
@@ -53,12 +54,32 @@ beforeAll(async () => {
   }
   fs.mkdirSync(SANDBOX_ROOT, { recursive: true })
   fs.writeFileSync(AUTH_FILE, JSON.stringify({ OPENAI_API_KEY: null, tokens: {} }, null, 2))
+  fs.writeFileSync(AUTO_LOGIN_CREDENTIALS_FILE, JSON.stringify({
+    accounts: [{ alias: 'saved-login', email: 'existing@example.com', chatgpt_password: 'placeholder' }]
+  }, null, 2))
+  fs.writeFileSync(STORE_FILE, JSON.stringify({
+    version: 2,
+    accounts: {
+      'codex-01': {
+        alias: 'codex-01',
+        email: 'existing@example.com',
+        accessToken: 'access-token',
+        refreshToken: 'refresh-token',
+        expiresAt: Date.now() + 60_000,
+        usageCount: 0
+      }
+    },
+    activeAlias: 'codex-01',
+    rotationIndex: 0,
+    lastRotation: Date.now()
+  }, null, 2))
 
   process.env = {
     ...originalEnv,
     OPENCODE_MULTI_AUTH_STORE_DIR: SANDBOX_ROOT,
     OPENCODE_MULTI_AUTH_STORE_FILE: STORE_FILE,
-    OPENCODE_MULTI_AUTH_CODEX_AUTH_FILE: AUTH_FILE
+    OPENCODE_MULTI_AUTH_CODEX_AUTH_FILE: AUTH_FILE,
+    OPENCODE_MULTI_AUTH_AUTO_LOGIN_CREDENTIALS_FILE: AUTO_LOGIN_CREDENTIALS_FILE
   }
 
   ;({ startWebConsole } = await import('../../src/web.js'))
@@ -135,6 +156,56 @@ describe('web server hardening', () => {
         body: '{}'
       })
       expect(originResponse.status).toBe(403)
+    } finally {
+      await closeServer(server)
+      fs.unwatchFile(getCodexAuthPath())
+    }
+  })
+
+  it('skips dashboard auto-login when the email already exists', async () => {
+    const port = await getFreePort()
+    const server = startWebConsole({ host: '127.0.0.1', port })
+
+    try {
+      await once(server, 'listening')
+      const response = await fetch(`http://127.0.0.1:${port}/api/auto-login/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ selector: 'EXISTING@example.com' })
+      })
+
+      expect(response.status).toBe(409)
+      const payload = (await response.json()) as { code?: string; alias?: string; error?: string }
+      expect(payload.code).toBe('AUTO_LOGIN_ACCOUNT_EXISTS')
+      expect(payload.alias).toBe('codex-01')
+      expect(payload.error).toContain('force')
+    } finally {
+      await closeServer(server)
+      fs.unwatchFile(getCodexAuthPath())
+    }
+  })
+
+  it('does not rewrite saved credentials when auto-add email already exists', async () => {
+    const port = await getFreePort()
+    const server = startWebConsole({ host: '127.0.0.1', port })
+    const before = fs.readFileSync(AUTO_LOGIN_CREDENTIALS_FILE, 'utf-8')
+
+    try {
+      await once(server, 'listening')
+      const response = await fetch(`http://127.0.0.1:${port}/api/auto-login/add`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: 'EXISTING@example.com',
+          password: 'replacement-password',
+          alias: 'replacement-alias'
+        })
+      })
+
+      expect(response.status).toBe(409)
+      const payload = (await response.json()) as { code?: string }
+      expect(payload.code).toBe('AUTO_LOGIN_ACCOUNT_EXISTS')
+      expect(fs.readFileSync(AUTO_LOGIN_CREDENTIALS_FILE, 'utf-8')).toBe(before)
     } finally {
       await closeServer(server)
       fs.unwatchFile(getCodexAuthPath())

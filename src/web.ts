@@ -8,7 +8,7 @@ import { exec, spawn } from 'node:child_process'
 import { promisify } from 'node:util'
 import { createAuthorizationFlow, loginAccount, refreshToken } from './auth.js'
 import { getCodexAuthPath, getCodexAuthStatus, getCodexAuthSummary, resolveAliasForCurrentAuth, syncCodexAuthFile, writeCodexAuthForAlias } from './codex-auth.js'
-import { getStoreStatus, listAccounts, loadStore, removeAccount, updateAccount } from './store.js'
+import { AccountEmailExistsError, getStoreStatus, listAccounts, loadStore, removeAccount, updateAccount } from './store.js'
 import { getRefreshQueueState, startRefreshQueue, stopRefreshQueue } from './refresh-queue.js'
 import { getLogPath, logError, logInfo, readLogTail } from './logger.js'
 import { getForceState, activateForce, clearForce, isForceActive, getRemainingForceTimeMs, formatForceDuration } from './force-mode.js'
@@ -173,6 +173,15 @@ function sendJson(res: http.ServerResponse, status: number, payload: unknown): v
     'Content-Length': Buffer.byteLength(data)
   })
   res.end(data)
+}
+
+function sendAutoLoginError(res: http.ServerResponse, err: unknown): void {
+  if (err instanceof AccountEmailExistsError) {
+    sendJson(res, 409, { code: err.code, alias: err.alias, error: err.message })
+    return
+  }
+  lastLoginError = String(err)
+  sendJson(res, 500, { error: String(err) })
 }
 
 function scrubAccount(account: AccountCredentials): Omit<AccountCredentials, 'accessToken' | 'refreshToken' | 'idToken'> {
@@ -437,10 +446,15 @@ function findAutoLoginAccount(config: AutoLoginConfigState, selector: string): A
   ) || null
 }
 
-function resolveAutoLoginAlias(store: ReturnType<typeof loadStore>, account: AutoLoginAccountView): string {
-  const existing = Object.values(store.accounts).find((entry) =>
-    typeof entry.email === 'string' && entry.email.toLowerCase() === account.email.toLowerCase()
+function findStoreAccountByEmail(store: ReturnType<typeof loadStore>, email: string): AccountCredentials | undefined {
+  const normalized = email.trim().toLowerCase()
+  return Object.values(store.accounts).find((account) =>
+    typeof account.email === 'string' && account.email.trim().toLowerCase() === normalized
   )
+}
+
+function resolveAutoLoginAlias(store: ReturnType<typeof loadStore>, account: AutoLoginAccountView): string {
+  const existing = findStoreAccountByEmail(store, account.email)
   if (existing) {
     return existing.alias
   }
@@ -541,7 +555,7 @@ function startManualLogin(alias: string): Promise<{ ok: true; url: string }> {
   })
 }
 
-async function startAutoLogin(selector: string, visible = false): Promise<{ ok: true; alias: string; email: string; url: string }> {
+async function startAutoLogin(selector: string, visible = false, force = false): Promise<{ ok: true; alias: string; email: string; url: string }> {
   if (pendingLogin) {
     throw new Error(`Login already in progress for ${pendingLogin.alias}`)
   }
@@ -560,6 +574,10 @@ async function startAutoLogin(selector: string, visible = false): Promise<{ ok: 
   }
 
   const store = loadStore()
+  const existing = findStoreAccountByEmail(store, selected.email)
+  if (existing && !force) {
+    throw new AccountEmailExistsError(existing.alias)
+  }
   const alias = resolveAutoLoginAlias(store, selected)
   const flow = await createAuthorizationFlow()
 
@@ -576,7 +594,11 @@ async function startAutoLogin(selector: string, visible = false): Promise<{ ok: 
   lastLoginError = null
 
   let loginSettled = false
-  const loginPromise = loginAccount(alias, flow, { timeoutMs: AUTO_LOGIN_TIMEOUT_MS })
+  const loginPromise = loginAccount(alias, flow, {
+    timeoutMs: AUTO_LOGIN_TIMEOUT_MS,
+    existingEmailPolicy: force ? 'update' : 'reject',
+    expectedEmail: selected.email
+  })
     .then(() => {
       loginSettled = true
       stopAutoLoginChild()
@@ -602,6 +624,7 @@ async function startAutoLogin(selector: string, visible = false): Promise<{ ok: 
       flow.url,
       '--credentials-file',
       config.path,
+      ...(force ? ['--force'] : []),
       ...(visible ? ['--visible'] : [])
     ],
     {
@@ -661,9 +684,15 @@ async function startAutoLogin(selector: string, visible = false): Promise<{ ok: 
   }
 }
 
-async function saveAutoLoginAccountAndStart(input: AutoLoginCreateInput): Promise<{ ok: true; alias: string; email: string; url: string }> {
+async function saveAutoLoginAccountAndStart(input: AutoLoginCreateInput, force = false): Promise<{ ok: true; alias: string; email: string; url: string }> {
+  if (!force) {
+    const existing = findStoreAccountByEmail(loadStore(), input.email)
+    if (existing) {
+      throw new AccountEmailExistsError(existing.alias)
+    }
+  }
   const account = upsertAutoLoginCredentials(input)
-  return startAutoLogin(account.email)
+  return startAutoLogin(account.email, false, force)
 }
 
 function runSync(): void {
@@ -1263,11 +1292,10 @@ export function startWebConsole(options?: { port?: number; host?: string }): htt
         return
       }
       try {
-        const result = await startAutoLogin(selector, body.visible === true)
+        const result = await startAutoLogin(selector, body.visible === true, body.force === true)
         sendJson(res, 200, result)
       } catch (err) {
-        lastLoginError = String(err)
-        sendJson(res, 500, { error: String(err) })
+        sendAutoLoginError(res, err)
       }
       return
     }
@@ -1292,11 +1320,10 @@ export function startWebConsole(options?: { port?: number; host?: string }): htt
           password,
           alias,
           chatgptPassword
-        })
+        }, body.force === true)
         sendJson(res, 200, result)
       } catch (err) {
-        lastLoginError = String(err)
-        sendJson(res, 500, { error: String(err) })
+        sendAutoLoginError(res, err)
       }
       return
     }

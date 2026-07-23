@@ -532,7 +532,7 @@ function CommandDeck({ state, busyAction, onSync, onRefreshTokens, onRefreshLimi
   onRefreshLimits: () => Promise<unknown>
   onRefresh: () => Promise<unknown>
   onStartLogin: (alias: string) => Promise<unknown>
-  onStartAutoLogin: (selector: string) => Promise<unknown>
+  onStartAutoLogin: (selector: string, force?: boolean) => Promise<unknown>
   onStopQueue: () => Promise<unknown>
 }) {
   const [alias, setAlias] = useState('')
@@ -566,6 +566,7 @@ function CommandDeck({ state, busyAction, onSync, onRefreshTokens, onRefreshLimi
           </select>
         </label>
         <button className="button button-secondary" type="submit" disabled={!selectorValid || controlsBusy}>{busyAction === 'login:auto' ? 'Starting...' : 'Auto add'}</button>
+        <button className="button button-quiet" type="button" disabled={!selectorValid || controlsBusy} onClick={() => void onStartAutoLogin(selector, true)}>Force update</button>
       </form>
       <QueueStatus queue={state.queue} onStop={onStopQueue} />
       {(state.lastSyncError || state.storeStatus.error) && <div className="inline-alert">{state.lastSyncError || state.storeStatus.error}</div>}
@@ -1070,7 +1071,7 @@ function App() {
               throw error
             }
           })}
-          onStartAutoLogin={(selector) => runMutation('login:auto', 'Auto-login started', () => api('/api/auto-login/start', { method: 'POST', body: JSON.stringify({ selector }) }))}
+          onStartAutoLogin={(selector, force = false) => runMutation('login:auto', force ? 'Forced auto-login started' : 'Auto-login started', () => api('/api/auto-login/start', { method: 'POST', body: JSON.stringify({ selector, force }) }))}
           onStopQueue={() => runMutation('queue:stop', 'Stopping refresh queue', () => api('/api/limits/stop', { method: 'POST', body: '{}' }))}
         />
 

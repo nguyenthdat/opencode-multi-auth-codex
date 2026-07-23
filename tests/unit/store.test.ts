@@ -7,6 +7,9 @@ import {
   getStoreDiagnostics,
   withWriteLock,
   addAccount,
+  AccountEmailExistsError,
+  AccountEmailMismatchError,
+  saveAuthenticatedAccount,
   updateAccount,
   removeAccount
 } from '../../src/store.js'
@@ -60,6 +63,79 @@ describe('Store Operations', () => {
     })
     const updated = updateAccount('test-alias', { email: 'updated@example.com' })
     expect(updated.accounts['test-alias'].email).toBe('updated@example.com')
+  })
+
+  it('should reject an authenticated email that already exists', () => {
+    addAccount('existing', {
+      accessToken: 'old-access-token',
+      refreshToken: 'old-refresh-token',
+      expiresAt: Date.now() + 3600000,
+      email: 'Existing@Example.com'
+    })
+
+    expect(() => saveAuthenticatedAccount('new-alias', {
+      accessToken: 'new-access-token',
+      refreshToken: 'new-refresh-token',
+      expiresAt: Date.now() + 7200000,
+      email: 'existing@example.com'
+    }, 'reject')).toThrow(AccountEmailExistsError)
+
+    const reloaded = loadStore()
+    expect(reloaded.accounts['new-alias']).toBeUndefined()
+    expect(reloaded.accounts.existing.accessToken).toBe('old-access-token')
+  })
+
+  it('should force-update tokens without dropping existing metadata', () => {
+    addAccount('existing', {
+      accessToken: 'old-access-token',
+      refreshToken: 'old-refresh-token',
+      expiresAt: Date.now() + 3600000,
+      email: 'existing@example.com'
+    })
+    updateAccount('existing', {
+      usageCount: 9,
+      enabled: false,
+      tags: ['work'],
+      notes: 'preserve me',
+      rateLimitedUntil: Date.now() + 60_000
+    })
+
+    const updated = saveAuthenticatedAccount('different-alias', {
+      accessToken: 'new-access-token',
+      refreshToken: 'new-refresh-token',
+      expiresAt: Date.now() + 7200000,
+      email: 'EXISTING@example.com',
+      authInvalid: false,
+      authInvalidatedAt: undefined
+    }, 'update')
+
+    expect(updated.accounts['different-alias']).toBeUndefined()
+    expect(updated.accounts.existing.accessToken).toBe('new-access-token')
+    expect(updated.accounts.existing.usageCount).toBe(9)
+    expect(updated.accounts.existing.enabled).toBe(false)
+    expect(updated.accounts.existing.tags).toEqual(['work'])
+    expect(updated.accounts.existing.notes).toBe('preserve me')
+    expect(typeof updated.accounts.existing.rateLimitedUntil).toBe('number')
+  })
+
+  it('should reject an authenticated identity that differs from the selected email', () => {
+    addAccount('selected', {
+      accessToken: 'old-access-token',
+      refreshToken: 'old-refresh-token',
+      expiresAt: Date.now() + 3600000,
+      email: 'selected@example.com'
+    })
+
+    expect(() => saveAuthenticatedAccount('selected', {
+      accessToken: 'different-access-token',
+      refreshToken: 'different-refresh-token',
+      expiresAt: Date.now() + 7200000,
+      email: 'different@example.com'
+    }, 'update', 'selected@example.com')).toThrow(AccountEmailMismatchError)
+
+    const reloaded = loadStore()
+    expect(reloaded.accounts.selected.email).toBe('selected@example.com')
+    expect(reloaded.accounts.selected.accessToken).toBe('old-access-token')
   })
 
   it('should persist accountUserId and userId across reload', () => {

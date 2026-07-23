@@ -1,3 +1,4 @@
+import type { ExistingEmailPolicy } from './store.js';
 import type { AccountCredentials } from './types.js';
 interface AuthorizationFlow {
     pkce: {
@@ -11,6 +12,8 @@ interface AuthorizationFlow {
 }
 export interface LoginAccountOptions {
     timeoutMs?: number;
+    existingEmailPolicy?: ExistingEmailPolicy;
+    expectedEmail?: string;
 }
 export declare function createAuthorizationFlow(port?: number): Promise<AuthorizationFlow>;
 export declare function loginAccount(alias: string, flow?: AuthorizationFlow, options?: LoginAccountOptions): Promise<AccountCredentials>;

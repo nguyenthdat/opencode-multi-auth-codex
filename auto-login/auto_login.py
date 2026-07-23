@@ -469,7 +469,7 @@ def save_store(store):
     os.chmod(STORE_FILE, 0o600)
 
 
-def add_account_to_store(tokens, preferred_alias=None):
+def add_account_to_store(tokens, preferred_alias=None, force=False):
     now = int(time.time() * 1000)
     access_claims = decode_jwt_payload(tokens["access_token"])
     id_claims = (
@@ -509,6 +509,9 @@ def add_account_to_store(tokens, preferred_alias=None):
         new_account["email"] = email
 
     store = load_store()
+    existing_alias = find_alias_by_email(store, email)
+    if existing_alias and not force:
+        return email, existing_alias, False
     alias, is_new = upsert_store_account(store, new_account, preferred_alias)
     save_store(store)
     return email, alias, is_new
@@ -1410,6 +1413,7 @@ def login_account(
     email,
     chatgpt_password,
     alias=None,
+    force=False,
     outlook_password=None,
     totp_secret=None,
     smspool_config=None,
@@ -2021,8 +2025,12 @@ def login_account(
     print("  [DONE] Exchanging code for tokens...")
     tokens = exchange_code_for_tokens(captured_code, redirect_uri, code_verifier)
 
-    stored_email, stored_alias, is_new = add_account_to_store(tokens, alias)
-    action = "Added new" if is_new else "Updated existing"
+    stored_email, stored_alias, is_new = add_account_to_store(
+        tokens, alias, force=force
+    )
+    action = (
+        "Added new" if is_new else ("Updated existing" if force else "Kept existing")
+    )
     print(f"  {action} account {stored_alias}: {stored_email}")
     return stored_email
 
@@ -2063,7 +2071,14 @@ def cmd_check(accounts):
     print()
 
 
-def cmd_login(targets, defaults, headless=True, auth_url=None, browser_engine="auto"):
+def cmd_login(
+    targets,
+    defaults,
+    headless=True,
+    auth_url=None,
+    browser_engine="auto",
+    force=False,
+):
     if auth_url and len(targets) != 1:
         print("[ERROR] --auth-url mode requires exactly one target account")
         return 0, len(targets)
@@ -2072,10 +2087,22 @@ def cmd_login(targets, defaults, headless=True, auth_url=None, browser_engine="a
     print(f"  Auto-Login: {len(targets)} account(s)")
     print(f"{'=' * 55}\n")
 
-    success, failed = 0, 0
+    success, skipped, failed = 0, 0, 0
+    # Dashboard-assisted mode enforces duplicate policy in TypeScript, which can
+    # also read encrypted stores. Standalone mode checks the Python-readable store.
+    store = None if force or auth_url else load_store()
 
     for i, acc in enumerate(targets):
         email = acc["email"]
+        existing_alias = find_alias_by_email(store, email) if store else None
+        if existing_alias:
+            print(
+                f"[{i + 1}/{len(targets)}] {email}: SKIPPED "
+                f"(already exists as {existing_alias}; use --force to refresh)"
+            )
+            skipped += 1
+            continue
+
         chatgpt_pw = (
             acc.get("chatgpt_password")
             or acc.get("password")
@@ -2122,6 +2149,7 @@ def cmd_login(targets, defaults, headless=True, auth_url=None, browser_engine="a
                         email,
                         chatgpt_pw,
                         alias=acc.get("alias"),
+                        force=force,
                         outlook_password=outlook_pw,
                         totp_secret=totp_secret,
                         smspool_config=smspool_config,
@@ -2164,7 +2192,7 @@ def cmd_login(targets, defaults, headless=True, auth_url=None, browser_engine="a
             time.sleep(BETWEEN_ACCOUNTS_DELAY)
 
     print(f"{'=' * 55}")
-    print(f"  Results: {success} success, {failed} failed")
+    print(f"  Results: {success} success, {skipped} skipped, {failed} failed")
     print(f"{'=' * 55}\n")
     return success, failed
 
@@ -2177,6 +2205,11 @@ def main():
     parser.add_argument("--account", type=int, help="Login by credential index")
     parser.add_argument("--email", type=str, help="Login by email")
     parser.add_argument("--check", action="store_true", help="Check account status")
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Refresh accounts even when their email already exists in accounts.json",
+    )
     parser.add_argument("--visible", action="store_true", help="Show browser window")
     parser.add_argument(
         "--browser",
@@ -2240,6 +2273,7 @@ def main():
         headless=headless,
         auth_url=args.auth_url,
         browser_engine=args.browser,
+        force=args.force,
     )
     sys.exit(0 if failed == 0 else 1)
 

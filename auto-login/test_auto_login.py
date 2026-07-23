@@ -75,7 +75,7 @@ class EnvironmentTests(unittest.TestCase):
 
 
 class StoreTests(unittest.TestCase):
-    def test_writes_current_store_schema_and_preserves_existing_metadata(self):
+    def test_writes_current_store_schema_and_requires_force_to_update(self):
         with tempfile.TemporaryDirectory() as directory:
             store_file = Path(directory) / "store" / "accounts.json"
             legacy_file = Path(directory) / "legacy.json"
@@ -129,8 +129,23 @@ class StoreTests(unittest.TestCase):
                 patch.object(auto_login, "LEGACY_STORE_FILE", legacy_file),
                 patch.object(auto_login, "decode_jwt_payload", side_effect=claims),
             ):
-                _, updated_alias, updated_is_new = auto_login.add_account_to_store(
+                _, skipped_alias, skipped_is_new = auto_login.add_account_to_store(
                     updated_tokens, "ignored-new-alias"
+                )
+
+            skipped = json.loads(store_file.read_text(encoding="utf-8"))["accounts"][
+                "team-primary"
+            ]
+            self.assertEqual((skipped_alias, skipped_is_new), ("team-primary", False))
+            self.assertEqual(skipped["accessToken"], "access-one")
+
+            with (
+                patch.object(auto_login, "STORE_FILE", store_file),
+                patch.object(auto_login, "LEGACY_STORE_FILE", legacy_file),
+                patch.object(auto_login, "decode_jwt_payload", side_effect=claims),
+            ):
+                _, updated_alias, updated_is_new = auto_login.add_account_to_store(
+                    updated_tokens, "ignored-new-alias", force=True
                 )
 
             updated = json.loads(store_file.read_text(encoding="utf-8"))["accounts"][
@@ -219,6 +234,72 @@ class StoreTests(unittest.TestCase):
             self.assertEqual(
                 json.loads(store_file.read_text(encoding="utf-8")), encrypted
             )
+
+
+class CommandLoginTests(unittest.TestCase):
+    def test_skips_existing_email_before_browser_login(self):
+        account = {
+            "email": "Existing@Example.com",
+            "chatgpt_password": "password",
+        }
+        store = {
+            "accounts": {
+                "codex-01": {
+                    "alias": "codex-01",
+                    "email": "existing@example.com",
+                }
+            }
+        }
+
+        with (
+            patch.object(auto_login, "load_store", return_value=store),
+            patch.object(auto_login, "login_account") as login,
+            patch("builtins.print"),
+        ):
+            result = auto_login.cmd_login([account], {})
+
+        self.assertEqual(result, (0, 0))
+        login.assert_not_called()
+
+    def test_force_logs_in_existing_email(self):
+        account = {
+            "email": "existing@example.com",
+            "chatgpt_password": "password",
+        }
+
+        with (
+            patch.object(auto_login, "load_store") as load_store,
+            patch.object(
+                auto_login, "login_account", return_value=account["email"]
+            ) as login,
+            patch("builtins.print"),
+        ):
+            result = auto_login.cmd_login([account], {}, force=True)
+
+        self.assertEqual(result, (1, 0))
+        load_store.assert_not_called()
+        self.assertTrue(login.call_args.kwargs["force"])
+
+    def test_dashboard_auth_url_does_not_read_python_store(self):
+        account = {
+            "email": "existing@example.com",
+            "chatgpt_password": "password",
+        }
+
+        with (
+            patch.object(auto_login, "load_store") as load_store,
+            patch.object(
+                auto_login, "login_account", return_value=account["email"]
+            ) as login,
+            patch("builtins.print"),
+        ):
+            result = auto_login.cmd_login(
+                [account], {}, auth_url="http://localhost:1455/auth/callback"
+            )
+
+        self.assertEqual(result, (1, 0))
+        load_store.assert_not_called()
+        self.assertTrue(login.call_args.kwargs["external_callback"])
 
 
 class BrowserElementTests(unittest.TestCase):
@@ -435,6 +516,7 @@ class SmsPoolTests(unittest.TestCase):
         }
         with (
             patch.object(auto_login, "login_account", side_effect=fake_login),
+            patch.object(auto_login, "load_store", return_value={"accounts": {}}),
             patch.object(auto_login.time, "sleep"),
         ):
             success, failed = auto_login.cmd_login([account], {})
