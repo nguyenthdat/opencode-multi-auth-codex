@@ -90,8 +90,8 @@ Install both the OpenCode server and TUI targets from npm:
 opencode plugin @nguyenthdat/opencode-multi-auth-codex@latest --global
 ```
 
-Quit and restart OpenCode after installation. In the OpenCode TUI, run `/multi-auth`
-or open the command palette and select **Manage Codex accounts** from the
+Quit and restart OpenCode after installation. In the OpenCode TUI, run `/codex`
+or open the command palette and select **Codex accounts** from the
 **Suggested** section. The TUI supports:
 
 - listing account status, plan, quota, and health
@@ -214,7 +214,7 @@ opencode-multi-auth web --host 127.0.0.1 --port 3434
 
 Open `http://127.0.0.1:3434`.
 
-Alternatively, restart OpenCode and run `/multi-auth` to manage and check accounts
+Alternatively, restart OpenCode and run `/codex` to manage and check accounts
 without leaving the OpenCode TUI.
 
 ## Automated Bulk Login (Outlook)

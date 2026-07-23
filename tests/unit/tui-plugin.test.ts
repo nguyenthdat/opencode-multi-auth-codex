@@ -7,6 +7,7 @@ import { addAccount, loadStore } from '../../src/store.js'
 interface TestCommand {
   name: string
   slashName?: string
+  slashAliases?: string[]
   run?: () => void
 }
 
@@ -40,14 +41,16 @@ describe('OpenCode TUI plugin', () => {
     expect(layers[0].commands).toEqual(expect.arrayContaining([
       expect.objectContaining({
         name: 'multi-auth.accounts',
-        title: 'Manage Codex accounts',
+        title: 'Codex accounts',
         suggested: true,
-        slashName: 'multi-auth'
+        slashName: 'codex',
+        slashAliases: ['multi-auth']
       }),
       expect.objectContaining({
         name: 'multi-auth.add',
         title: 'Add Codex account',
-        slashName: 'multi-auth-add'
+        slashName: 'codex-add',
+        slashAliases: ['multi-auth-add']
       })
     ]))
   })

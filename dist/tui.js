@@ -402,12 +402,13 @@ const tui = async (api, options) => {
         commands: [
             {
                 name: 'multi-auth.accounts',
-                title: 'Manage Codex accounts',
+                title: 'Codex accounts',
                 desc: 'Manage Codex OAuth accounts and check quota/health',
                 category: 'Codex Accounts',
                 namespace: 'palette',
                 suggested: true,
-                slashName: 'multi-auth',
+                slashName: 'codex',
+                slashAliases: ['multi-auth'],
                 run() {
                     showAccounts(api);
                 }
@@ -418,7 +419,8 @@ const tui = async (api, options) => {
                 desc: 'Add a Codex OAuth account using browser authentication',
                 category: 'Codex Accounts',
                 namespace: 'palette',
-                slashName: 'multi-auth-add',
+                slashName: 'codex-add',
+                slashAliases: ['multi-auth-add'],
                 run() {
                     showAddAccount(api);
                 }
