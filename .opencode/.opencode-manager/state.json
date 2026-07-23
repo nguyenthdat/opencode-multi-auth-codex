@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "mcps": {},
+  "skills": {
+    "custom:typescript-coding": {
+      "source": "custom",
+      "sourcePath": "typescript-coding",
+      "name": "typescript-coding",
+      "digest": "69a49dc45760a4230823f31d7b705d4e26d8de960ca98f03a1d31e9a15d5e686"
+    },
+    "custom:python-coding": {
+      "source": "custom",
+      "sourcePath": "python-coding",
+      "name": "python-coding",
+      "digest": "8194b0197d331d59104c98e81700253891311b7815e30b20d6c8e528e088903e"
+    }
+  }
+}
