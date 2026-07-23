@@ -9,8 +9,8 @@
         "reasoningSummary": "auto",
         "textVerbosity": "medium",
         "include": ["reasoning.encrypted_content"],
-        "store": false
-      }
-    }
-  }
+        "store": false,
+      },
+    },
+  },
 }
