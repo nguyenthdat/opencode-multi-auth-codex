@@ -501,22 +501,34 @@ Use `codextesting.md` for the Codex CLI live-testing checklist and copy-paste co
 
 ## Release flow
 
-- This plugin is now intended to be installed from npm, so every shipped update should bump `package.json` version and publish a new package version. Reusing the same version on a new commit will leave users stuck on cached installs.
-- Prepare the next release by bumping the package version, rebuilding, and publishing:
+- Every shipped update must use a new `package.json` version. Reusing a version leaves users on cached npm installs.
+- Prepare and validate the release on `main`:
 
 ```bash
-bun pm pkg set version=1.5.1
+bun pm pkg set version=X.Y.Z
 bun install --lockfile-only
+bun run lint
+bun test
 bun run build
-bun publish --access public
+bun audit
+git diff --exit-code -- dist
 ```
 
-- After that, cut the git release from `main`:
+- Commit and push the version/build changes, then create the matching tag:
 
 ```bash
-git commit -m "chore: release v1.5.1"
-git tag v1.5.1
-git push origin main --follow-tags
+git commit -m "chore: release vX.Y.Z"
+git push origin main
+git tag -a vX.Y.Z -m "vX.Y.Z"
+git push origin vX.Y.Z
+```
+
+The `Release` workflow validates the tag, runs CI and audit checks, packs the npm artifact,
+publishes through npm Trusted Publishing with provenance, and creates the GitHub Release
+with the package tarball and SHA-256 checksum. Re-run an existing tag with:
+
+```bash
+gh workflow run publish-npm.yml -f tag=vX.Y.Z
 ```
 
 - Users who want a pinned build can install a specific npm version:
