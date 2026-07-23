@@ -1,7 +1,7 @@
 # OpenCode Setup (Current 1:1 Stack)
 
 This guide installs the current `@nguyenthdat/opencode-multi-auth-codex`
-package for OpenCode. It replaces the former `@nguyenthdat`-specific setup, old
+package for OpenCode. It replaces the former `guard22`-specific setup, old
 package paths, and GPT-5.2-to-5.3 mapping instructions.
 
 For the complete option reference, use `README.md`. Third-party plugins such as

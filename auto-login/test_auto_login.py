@@ -75,7 +75,9 @@ class EnvironmentTests(unittest.TestCase):
 
 class TotpTests(unittest.TestCase):
     def test_matches_rfc_6238_sha1_vector(self):
-        secret = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"
+        secret = (
+            "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"  # gitleaks:allow - RFC 6238 test vector
+        )
         self.assertEqual(auto_login.generate_totp(secret, timestamp=59), "287082")
 
     def test_accepts_grouped_base32_secret(self):
