@@ -30,7 +30,10 @@ function findAccountAliasByToken(access: string, refresh?: string): string | nul
   return null
 }
 
-function findAccountAliasByEmail(email: string, store: ReturnType<typeof loadStore>): string | null {
+function findAccountAliasByEmail(
+  email: string,
+  store: ReturnType<typeof loadStore>
+): string | null {
   for (const account of Object.values(store.accounts)) {
     if (account.email && account.email === email) return account.alias
   }

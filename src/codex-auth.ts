@@ -75,10 +75,16 @@ export function writeCodexAuthFile(auth: CodexAuthFile): void {
   })
 }
 
-function normalizeTokens(auth: any): { accessToken?: string; refreshToken?: string; idToken?: string; accountId?: string; lastRefresh?: string } | null {
+function normalizeTokens(auth: any): {
+  accessToken?: string
+  refreshToken?: string
+  idToken?: string
+  accountId?: string
+  lastRefresh?: string
+} | null {
   if (!auth || typeof auth !== 'object') return null
 
-  const tokens = (auth.tokens && typeof auth.tokens === 'object') ? auth.tokens : auth
+  const tokens = auth.tokens && typeof auth.tokens === 'object' ? auth.tokens : auth
 
   const accessToken =
     tokens.access_token ??
@@ -97,22 +103,19 @@ function normalizeTokens(auth: any): { accessToken?: string; refreshToken?: stri
     auth.refresh
 
   const idToken =
-    tokens.id_token ??
-    tokens.idToken ??
-    tokens.id ??
-    auth.id_token ??
-    auth.idToken ??
-    auth.id
+    tokens.id_token ?? tokens.idToken ?? tokens.id ?? auth.id_token ?? auth.idToken ?? auth.id
 
-  const accountId =
-    tokens.account_id ??
-    tokens.accountId ??
-    auth.account_id ??
-    auth.accountId
+  const accountId = tokens.account_id ?? tokens.accountId ?? auth.account_id ?? auth.accountId
 
   const lastRefresh = auth.last_refresh ?? auth.lastRefresh
 
-  const result: { accessToken?: string; refreshToken?: string; idToken?: string; accountId?: string; lastRefresh?: string } = {
+  const result: {
+    accessToken?: string
+    refreshToken?: string
+    idToken?: string
+    accountId?: string
+    lastRefresh?: string
+  } = {
     accessToken: typeof accessToken === 'string' ? accessToken : undefined,
     refreshToken: typeof refreshToken === 'string' ? refreshToken : undefined,
     idToken: typeof idToken === 'string' ? idToken : undefined,
@@ -155,14 +158,16 @@ export function getAccountIdFromClaims(claims: Record<string, any> | null): stri
 
 function getAccountUserIdFromClaims(claims: Record<string, any> | null): string | undefined {
   if (!claims) return undefined
-  const auth = claims['https://api.openai.com/auth'] as { chatgpt_account_user_id?: string } | undefined
+  const auth = claims['https://api.openai.com/auth'] as
+    { chatgpt_account_user_id?: string } | undefined
   if (typeof auth?.chatgpt_account_user_id === 'string') return auth.chatgpt_account_user_id
   return undefined
 }
 
 function getUserIdFromClaims(claims: Record<string, any> | null): string | undefined {
   if (!claims) return undefined
-  const auth = claims['https://api.openai.com/auth'] as { user_id?: string; chatgpt_user_id?: string } | undefined
+  const auth = claims['https://api.openai.com/auth'] as
+    { user_id?: string; chatgpt_user_id?: string } | undefined
   if (typeof auth?.user_id === 'string') return auth.user_id
   if (typeof auth?.chatgpt_user_id === 'string') return auth.chatgpt_user_id
   return undefined
@@ -185,7 +190,11 @@ function fingerprintTokens(tokens: CodexAuthTokens): string {
   return `${tokens.access_token || ''}:${tokens.refresh_token || ''}:${tokens.id_token || ''}`
 }
 
-function buildAlias(email: string | undefined, accountId: string | undefined, store: ReturnType<typeof loadStore>): string {
+function buildAlias(
+  email: string | undefined,
+  accountId: string | undefined,
+  store: ReturnType<typeof loadStore>
+): string {
   const base = email?.split('@')[0] || accountId?.slice(0, 8) || `account-${Date.now()}`
   const existing = new Set(Object.keys(store.accounts))
   let candidate = base || `account-${Date.now()}`
@@ -239,8 +248,12 @@ export function getCodexAuthSummary(): CodexAuthSummary {
   const accessClaims = access ? decodeJwtPayload(access) : null
   const idClaims = idToken ? decodeJwtPayload(idToken) : null
   const email = getEmailFromClaims(idClaims) || getEmailFromClaims(accessClaims)
-  const accountId = normalized?.accountId || getAccountIdFromClaims(idClaims) || getAccountIdFromClaims(accessClaims)
-  const accountUserId = getAccountUserIdFromClaims(accessClaims) || getAccountUserIdFromClaims(idClaims)
+  const accountId =
+    normalized?.accountId ||
+    getAccountIdFromClaims(idClaims) ||
+    getAccountIdFromClaims(accessClaims)
+  const accountUserId =
+    getAccountUserIdFromClaims(accessClaims) || getAccountUserIdFromClaims(idClaims)
   const userId = getUserIdFromClaims(accessClaims) || getUserIdFromClaims(idClaims)
   const planType = getPlanTypeFromClaims(accessClaims) || getPlanTypeFromClaims(idClaims)
   const expiresAt = getExpiryFromClaims(accessClaims) || getExpiryFromClaims(idClaims)
@@ -265,8 +278,10 @@ export function resolveAliasForCurrentAuth(store?: ReturnType<typeof loadStore>)
   const accessClaims = normalized.accessToken ? decodeJwtPayload(normalized.accessToken) : null
   const idClaims = normalized.idToken ? decodeJwtPayload(normalized.idToken) : null
   const email = getEmailFromClaims(idClaims) || getEmailFromClaims(accessClaims)
-  const accountId = normalized.accountId || getAccountIdFromClaims(idClaims) || getAccountIdFromClaims(accessClaims)
-  const accountUserId = getAccountUserIdFromClaims(accessClaims) || getAccountUserIdFromClaims(idClaims)
+  const accountId =
+    normalized.accountId || getAccountIdFromClaims(idClaims) || getAccountIdFromClaims(accessClaims)
+  const accountUserId =
+    getAccountUserIdFromClaims(accessClaims) || getAccountUserIdFromClaims(idClaims)
   const userId = getUserIdFromClaims(accessClaims) || getUserIdFromClaims(idClaims)
   const targetStore = store ?? loadStore()
   return findMatchingAlias(
@@ -297,7 +312,10 @@ export function syncCodexAuthFile(): {
     const accessClaims = normalized?.accessToken ? decodeJwtPayload(normalized.accessToken) : null
     const idClaims = normalized?.idToken ? decodeJwtPayload(normalized.idToken) : null
     const email = getEmailFromClaims(idClaims) || getEmailFromClaims(accessClaims)
-    const accountId = normalized?.accountId || getAccountIdFromClaims(idClaims) || getAccountIdFromClaims(accessClaims)
+    const accountId =
+      normalized?.accountId ||
+      getAccountIdFromClaims(idClaims) ||
+      getAccountIdFromClaims(accessClaims)
     return {
       alias: null,
       added: false,
@@ -318,8 +336,10 @@ export function syncCodexAuthFile(): {
   const accessClaims = decodeJwtPayload(normalized.accessToken)
   const idClaims = normalized.idToken ? decodeJwtPayload(normalized.idToken) : null
   const email = getEmailFromClaims(idClaims) || getEmailFromClaims(accessClaims)
-  const accountId = normalized.accountId || getAccountIdFromClaims(idClaims) || getAccountIdFromClaims(accessClaims)
-  const accountUserId = getAccountUserIdFromClaims(accessClaims) || getAccountUserIdFromClaims(idClaims)
+  const accountId =
+    normalized.accountId || getAccountIdFromClaims(idClaims) || getAccountIdFromClaims(accessClaims)
+  const accountUserId =
+    getAccountUserIdFromClaims(accessClaims) || getAccountUserIdFromClaims(idClaims)
   const userId = getUserIdFromClaims(accessClaims) || getUserIdFromClaims(idClaims)
   const planType = getPlanTypeFromClaims(idClaims) || getPlanTypeFromClaims(accessClaims)
   const expiresAt = getExpiryFromClaims(accessClaims) || getExpiryFromClaims(idClaims) || Date.now()

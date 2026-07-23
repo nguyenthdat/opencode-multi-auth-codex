@@ -79,9 +79,10 @@ async function main(): Promise<void> {
 
       for (const acc of accounts) {
         const isActive = acc.alias === store.activeAlias ? ' (active)' : ''
-        const isRateLimited = acc.rateLimitedUntil && acc.rateLimitedUntil > Date.now()
-          ? ` [RATE LIMITED until ${new Date(acc.rateLimitedUntil).toLocaleTimeString()}]`
-          : ''
+        const isRateLimited =
+          acc.rateLimitedUntil && acc.rateLimitedUntil > Date.now()
+            ? ` [RATE LIMITED until ${new Date(acc.rateLimitedUntil).toLocaleTimeString()}]`
+            : ''
         const expiry = new Date(acc.expiresAt).toLocaleString()
 
         console.log(`  ${acc.alias}${isActive}${isRateLimited}`)
@@ -166,7 +167,7 @@ After adding accounts, the plugin auto-rotates between them.
   }
 }
 
-main().catch(err => {
+main().catch((err) => {
   console.error('Fatal error:', err)
   process.exit(1)
 })

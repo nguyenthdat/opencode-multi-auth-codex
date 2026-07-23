@@ -1,10 +1,6 @@
 const MODELS_ENDPOINT = 'https://api.openai.com/v1/models';
 export const REASONING_LEVELS = ['none', 'low', 'medium', 'high', 'xhigh', 'max'];
-export const GPT_5_6_MODELS = [
-    'gpt-5.6-sol',
-    'gpt-5.6-terra',
-    'gpt-5.6-luna'
-];
+export const GPT_5_6_MODELS = ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'];
 const MODEL_LIMITS = {
     'gpt-5.6-sol': { context: 1_050_000, input: 922_000, output: 128_000 },
     'gpt-5.6-luna': { context: 1_050_000, input: 922_000, output: 128_000 },
@@ -19,7 +15,7 @@ const MODEL_LIMITS = {
     'gpt-5.1': { context: 272000, output: 128000 },
     'gpt-5.1-codex': { context: 272000, output: 128000 },
     'gpt-5.1-codex-max': { context: 272000, output: 128000 },
-    'gpt-5.1-codex-mini': { context: 272000, output: 128000 },
+    'gpt-5.1-codex-mini': { context: 272000, output: 128000 }
 };
 function getModelLimits(modelId) {
     for (const [prefix, limits] of Object.entries(MODEL_LIMITS)) {
@@ -96,7 +92,7 @@ export async function fetchAvailableModels(token) {
     }
 }
 export function filterGPT5Models(models) {
-    return models.filter(m => m.id.match(/^gpt-5/));
+    return models.filter((m) => m.id.match(/^gpt-5/));
 }
 export function generateModelVariants(baseModels) {
     const result = {};

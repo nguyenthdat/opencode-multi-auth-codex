@@ -63,9 +63,7 @@ STORE_FILE = Path(
     os.environ.get("OPENCODE_MULTI_AUTH_STORE_FILE", STORE_DIR / "accounts.json")
 ).expanduser()
 STORE_DIR = STORE_FILE.parent
-LEGACY_STORE_FILE = (
-    Path.home() / ".config" / "opencode" / "opencode-multi-auth-codex-accounts.json"
-)
+LEGACY_STORE_FILE = Path.home() / ".config" / "opencode" / "opencode-multi-auth-codex-accounts.json"
 
 # Credentials file
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -179,9 +177,7 @@ def launch_automation_browser(headless=True, browser_engine="auto"):
 
     with sync_playwright() as playwright:
         chromium_path = find_browser_executable()
-        browser_name = (
-            Path(chromium_path).name if chromium_path else "playwright-chromium"
-        )
+        browser_name = Path(chromium_path).name if chromium_path else "playwright-chromium"
         effective_headless = headless
         if headless and chromium_path and has_graphical_session():
             lowered_name = browser_name.lower()
@@ -215,9 +211,7 @@ def generate_pkce():
 
 
 def generate_state():
-    return (
-        base64.urlsafe_b64encode(secrets.token_bytes(32)).rstrip(b"=").decode("ascii")
-    )
+    return base64.urlsafe_b64encode(secrets.token_bytes(32)).rstrip(b"=").decode("ascii")
 
 
 def build_auth_url(code_challenge, state, redirect_uri):
@@ -299,9 +293,7 @@ def exchange_code_for_tokens(code, redirect_uri, code_verifier):
         headers={"Content-Type": "application/x-www-form-urlencoded"},
         method="POST",
     )
-    with urllib.request.urlopen(
-        req, timeout=30, context=ssl._create_unverified_context()
-    ) as resp:
+    with urllib.request.urlopen(req, timeout=30, context=ssl._create_unverified_context()) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
 
@@ -383,9 +375,7 @@ def upsert_store_account(store, account, preferred_alias=None):
         }
         return existing_alias, False
 
-    alias = unique_alias(
-        store, preferred_alias or account.get("alias"), account.get("email")
-    )
+    alias = unique_alias(store, preferred_alias or account.get("alias"), account.get("email"))
     store["accounts"][alias] = {
         **account,
         "alias": alias,
@@ -472,9 +462,7 @@ def save_store(store):
 def add_account_to_store(tokens, preferred_alias=None, force=False):
     now = int(time.time() * 1000)
     access_claims = decode_jwt_payload(tokens["access_token"])
-    id_claims = (
-        decode_jwt_payload(tokens["id_token"]) if tokens.get("id_token") else None
-    )
+    id_claims = decode_jwt_payload(tokens["id_token"]) if tokens.get("id_token") else None
 
     expires_at = (
         get_expiry_from_claims(access_claims)
@@ -486,9 +474,7 @@ def add_account_to_store(tokens, preferred_alias=None, force=False):
         or get_email_from_claims(access_claims)
         or fetch_userinfo_email(tokens["access_token"])
     )
-    account_id = get_account_id_from_claims(id_claims) or get_account_id_from_claims(
-        access_claims
-    )
+    account_id = get_account_id_from_claims(id_claims) or get_account_id_from_claims(access_claims)
 
     new_account = {
         "accessToken": tokens["access_token"],
@@ -570,9 +556,7 @@ def deduplicate_accounts(accounts):
     for account in accounts:
         email_key = normalize_email(account.get("email"))
         if email_key and email_key in seen:
-            print(
-                f"[WARNING] Skipping duplicate credentials for {account.get('email')}"
-            )
+            print(f"[WARNING] Skipping duplicate credentials for {account.get('email')}")
             continue
         if email_key:
             seen.add(email_key)
@@ -587,8 +571,7 @@ def load_credentials(credentials_path=None):
         sys.exit(1)
     if os.name != "nt" and path.stat().st_mode & 0o077:
         print(
-            f"[WARNING] Credentials file is readable by other users: {path}. "
-            f"Run: chmod 600 {path}"
+            f"[WARNING] Credentials file is readable by other users: {path}. Run: chmod 600 {path}"
         )
     raw = path.read_text(encoding="utf-8-sig")
     if path.suffix.lower() == ".json" or raw.lstrip().startswith(("{", "[")):
@@ -644,9 +627,7 @@ def _encode_multipart(fields):
         chunks.extend(
             [
                 f"--{boundary}\r\n".encode("ascii"),
-                f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode(
-                    "ascii"
-                ),
+                f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode("ascii"),
                 str(value).encode("utf-8"),
                 b"\r\n",
             ]
@@ -655,9 +636,7 @@ def _encode_multipart(fields):
     return b"".join(chunks), boundary
 
 
-def smspool_api_request(
-    endpoint, api_key, fields=None, method="POST", timeout: float = 30
-):
+def smspool_api_request(endpoint, api_key, fields=None, method="POST", timeout: float = 30):
     if not api_key:
         raise RuntimeError("SMSPOOL_API_KEY is required for phone verification")
 
@@ -689,9 +668,7 @@ def smspool_api_request(
             message = error.get("message") or error.get("type") or body
         except Exception:
             message = body or str(exc)
-        raise RuntimeError(
-            f"SMSPool {endpoint} failed with HTTP {exc.code}: {message}"
-        ) from exc
+        raise RuntimeError(f"SMSPool {endpoint} failed with HTTP {exc.code}: {message}") from exc
     except URLError as exc:
         raise RuntimeError(f"SMSPool {endpoint} request failed: {exc.reason}") from exc
 
@@ -720,15 +697,9 @@ def _normalize_smspool_phone(order):
 def purchase_smspool_number(api_key, config=None):
     config = config or {}
     fields = {
-        "country": _smspool_option(
-            config, "country", "SMSPOOL_COUNTRY", SMSPOOL_DEFAULT_COUNTRY
-        ),
-        "service": _smspool_option(
-            config, "service", "SMSPOOL_SERVICE", SMSPOOL_OPENAI_SERVICE
-        ),
-        "pricing_option": _smspool_option(
-            config, "pricing_option", "SMSPOOL_PRICING_OPTION", 0
-        ),
+        "country": _smspool_option(config, "country", "SMSPOOL_COUNTRY", SMSPOOL_DEFAULT_COUNTRY),
+        "service": _smspool_option(config, "service", "SMSPOOL_SERVICE", SMSPOOL_OPENAI_SERVICE),
+        "pricing_option": _smspool_option(config, "pricing_option", "SMSPOOL_PRICING_OPTION", 0),
         "quantity": 1,
         "activation_type": "SMS",
     }
@@ -868,25 +839,15 @@ def cancel_smspool_order(order_id, api_key, max_attempts=3):
                 "/sms/cancel", api_key, {"orderid": order_id, "key": api_key}
             )
         except RuntimeError as exc:
-            if (
-                "cannot be cancelled yet" in str(exc).lower()
-                and attempt < max_attempts - 1
-            ):
+            if "cannot be cancelled yet" in str(exc).lower() and attempt < max_attempts - 1:
                 time.sleep(5)
                 continue
             raise
 
         if isinstance(result, dict) and str(result.get("success", "0")) == "1":
             return True
-        message = (
-            result.get("message", "unknown error")
-            if isinstance(result, dict)
-            else result
-        )
-        if (
-            "cannot be cancelled yet" in str(message).lower()
-            and attempt < max_attempts - 1
-        ):
+        message = result.get("message", "unknown error") if isinstance(result, dict) else result
+        if "cannot be cancelled yet" in str(message).lower() and attempt < max_attempts - 1:
             time.sleep(5)
             continue
         raise RuntimeError(f"SMSPool could not cancel order {order_id}: {message}")
@@ -1028,9 +989,7 @@ def handle_totp_challenge(page, totp_secret, attempted_counters=None):
     _submit_verification_form(page)
     page.wait_for_timeout(5000)
     if _is_totp_challenge(page):
-        print(
-            "  [WARNING] Authenticator code was not accepted; retrying if time allows."
-        )
+        print("  [WARNING] Authenticator code was not accepted; retrying if time allows.")
         return False
     return True
 
@@ -1064,9 +1023,7 @@ def handle_smspool_phone_challenge(page, config=None, attempted_numbers=None):
 
     api_key = os.environ.get("SMSPOOL_API_KEY")
     if not api_key:
-        raise RuntimeError(
-            "Phone verification is required; set SMSPOOL_API_KEY to use SMSPool"
-        )
+        raise RuntimeError("Phone verification is required; set SMSPOOL_API_KEY to use SMSPool")
 
     config = config or {}
     configured_timeout = int(
@@ -1088,9 +1045,7 @@ def handle_smspool_phone_challenge(page, config=None, attempted_numbers=None):
     try:
         if phone in attempted_numbers:
             order_closed = cancel_smspool_order(order["order_id"], api_key)
-            raise SmsPoolRetryRequired(
-                f"SMSPool repeated number ending in {phone[-4:]}"
-            )
+            raise SmsPoolRetryRequired(f"SMSPool repeated number ending in {phone[-4:]}")
         attempted_numbers.add(phone)
 
         print(f"  [4/5] Entering SMSPool number ending in {phone[-4:]}...")
@@ -1109,19 +1064,13 @@ def handle_smspool_phone_challenge(page, config=None, attempted_numbers=None):
                 "restart OAuth with a different number"
             )
 
-        print(
-            f"  [4/5] Waiting up to {timeout}s for SMSPool order {order['order_id']}..."
-        )
+        print(f"  [4/5] Waiting up to {timeout}s for SMSPool order {order['order_id']}...")
         try:
-            code = wait_for_smspool_sms(
-                order["order_id"], api_key, timeout_seconds=timeout
-            )
+            code = wait_for_smspool_sms(order["order_id"], api_key, timeout_seconds=timeout)
         except TimeoutError as exc:
             order_closed = cancel_smspool_order(order["order_id"], api_key)
             if order_closed:
-                print(
-                    f"  [4/5] No SMS after {timeout}s; refunded order {order['order_id']}."
-                )
+                print(f"  [4/5] No SMS after {timeout}s; refunded order {order['order_id']}.")
             raise SmsPoolRetryRequired(
                 "SMS timed out; restart OAuth with a different number"
             ) from exc
@@ -1155,8 +1104,7 @@ def _outlook_login(context, outlook_email, outlook_password):
     mail_page = context.new_page()
     try:
         mail_page.goto(
-            "https://login.live.com/login.srf?"
-            "wa=wsignin1.0&wreply=https://outlook.live.com/mail/",
+            "https://login.live.com/login.srf?wa=wsignin1.0&wreply=https://outlook.live.com/mail/",
             wait_until="networkidle",
             timeout=30000,
         )
@@ -1210,10 +1158,7 @@ def _outlook_login(context, outlook_email, outlook_password):
             current_url = mail_page.url.lower()
 
             # Already at inbox?
-            if (
-                "outlook.live.com/mail" in current_url
-                or "outlook.office.com" in current_url
-            ):
+            if "outlook.live.com/mail" in current_url or "outlook.office.com" in current_url:
                 break
 
             try:
@@ -1262,9 +1207,7 @@ def _outlook_login(context, outlook_email, outlook_password):
 
         # If still not on inbox, force-navigate there
         if "outlook.live.com/mail" not in mail_page.url.lower():
-            print(
-                f"    [outlook] Not on inbox yet ({mail_page.url[:60]}), navigating..."
-            )
+            print(f"    [outlook] Not on inbox yet ({mail_page.url[:60]}), navigating...")
             try:
                 mail_page.goto(
                     "https://outlook.live.com/mail/0/",
@@ -1492,9 +1435,7 @@ def login_account(
 
         def _has_callback():
             return (
-                _on_local_callback()
-                if external_callback
-                else bool(CallbackServer.captured_codes)
+                _on_local_callback() if external_callback else bool(CallbackServer.captured_codes)
             )
 
         def _page_title_lower():
@@ -1557,13 +1498,10 @@ def login_account(
                 if _has_callback():
                     return
                 if page.query_selector(
-                    "input[name='email'], input[type='email'], "
-                    "input#email, input[name='username']"
+                    "input[name='email'], input[type='email'], input#email, input[name='username']"
                 ):
                     return
-                if page.query_selector(
-                    "input[name='password'], input[type='password']"
-                ):
+                if page.query_selector("input[name='password'], input[type='password']"):
                     return
                 if _is_cloudflare_gate():
                     if cloudflare_since is None:
@@ -1595,9 +1533,7 @@ def login_account(
                         print("  [1/5] Waiting for Cloudflare verification...")
                         noted_cloudflare = True
                 elif _is_timeout_screen():
-                    print(
-                        "  [1/5] OpenAI auth timed out before login form, retrying..."
-                    )
+                    print("  [1/5] OpenAI auth timed out before login form, retrying...")
                     _retry_timeout_page()
                     continue
                 else:
@@ -1620,9 +1556,7 @@ def login_account(
                     return "ready"
                 if page.query_selector(otp_selector):
                     return "ready"
-                if page.query_selector(
-                    "input[name='password'], input[type='password']"
-                ):
+                if page.query_selector("input[name='password'], input[type='password']"):
                     return "ready"
                 if "consent" in current_url or "email-verification" in current_url:
                     return "ready"
@@ -1675,8 +1609,7 @@ def login_account(
             try:
                 _wait_for_auth_entry(timeout_ms=20000)
                 email_input = page.wait_for_selector(
-                    "input[name='email'], input[type='email'], "
-                    "input#email, input[name='username']",
+                    "input[name='email'], input[type='email'], input#email, input[name='username']",
                     timeout=15000,
                 )
                 _human_type(email_input, email)
@@ -1692,9 +1625,7 @@ def login_account(
                     email_step_error = None
                     break
                 if next_stage == "retry-email" and attempt < 3:
-                    print(
-                        "  [2/5] OpenAI returned a timeout page after email submit, retrying..."
-                    )
+                    print("  [2/5] OpenAI returned a timeout page after email submit, retrying...")
                     _retry_timeout_page()
                     continue
                 email_step_error = RuntimeError(
@@ -1705,9 +1636,7 @@ def login_account(
                 if attempt < 3:
                     print(f"  [2/5] Email step failed: {e}. Retrying...")
                     try:
-                        page.goto(
-                            auth_url, wait_until="domcontentloaded", timeout=30000
-                        )
+                        page.goto(auth_url, wait_until="domcontentloaded", timeout=30000)
                         _wait_for_auth_entry(timeout_ms=20000)
                     except Exception:
                         pass
@@ -1733,9 +1662,7 @@ def login_account(
                 page.wait_for_timeout(3000)
 
                 # Check if we need to enter email again on OTP page
-                otp_email_input = page.query_selector(
-                    "input[name='email'], input[type='email']"
-                )
+                otp_email_input = page.query_selector("input[name='email'], input[type='email']")
                 if otp_email_input:
                     _human_type(otp_email_input, email)
                     time.sleep(0.6)
@@ -1777,9 +1704,7 @@ def login_account(
                         page.wait_for_timeout(5000)
                         otp_login_done = True
                     else:
-                        print(
-                            "  [3/5] Could not read OTP from Outlook, trying password..."
-                        )
+                        print("  [3/5] Could not read OTP from Outlook, trying password...")
                 else:
                     print("  [3/5] Outlook login failed, trying password...")
             except Exception as e:
@@ -1819,9 +1744,7 @@ def login_account(
                             if otp_link2 and outlook_password:
                                 otp_link2.click()
                                 page.wait_for_timeout(3000)
-                                mail_page = _outlook_login(
-                                    context, email, outlook_password
-                                )
+                                mail_page = _outlook_login(context, email, outlook_password)
                                 if mail_page:
                                     page.wait_for_timeout(10000)
                                     otp_code = _outlook_read_latest_code(mail_page)
@@ -1847,9 +1770,7 @@ def login_account(
                     raise RuntimeError(f"Password step failed: {e}")
 
         if not _has_callback():
-            totp_done = handle_totp_challenge(
-                page, totp_secret, totp_attempted_counters
-            )
+            totp_done = handle_totp_challenge(page, totp_secret, totp_attempted_counters)
 
         # ── Step 4: Handle email verification (after password login)
         if not _has_callback() and not otp_login_done:
@@ -1864,15 +1785,11 @@ def login_account(
                     pass
 
             if needs_verification and outlook_password:
-                print(
-                    "  [4/5] Email verification required, getting code from Outlook..."
-                )
+                print("  [4/5] Email verification required, getting code from Outlook...")
                 mail_page = _outlook_login(context, email, outlook_password)
                 if mail_page:
                     # Resend for fresh code
-                    resend = page.query_selector(
-                        "button:has-text('Resend'), a:has-text('Resend')"
-                    )
+                    resend = page.query_selector("button:has-text('Resend'), a:has-text('Resend')")
                     if resend:
                         resend.click()
                     page.wait_for_timeout(10000)
@@ -1895,9 +1812,7 @@ def login_account(
                         page.wait_for_timeout(5000)
 
         if not _has_callback() and not totp_done:
-            totp_done = handle_totp_challenge(
-                page, totp_secret, totp_attempted_counters
-            )
+            totp_done = handle_totp_challenge(page, totp_secret, totp_attempted_counters)
         if not _has_callback():
             phone_verification_done = handle_smspool_phone_challenge(
                 page, smspool_config, smspool_attempted_numbers
@@ -1962,9 +1877,7 @@ def login_account(
                 or (not external_callback and not CallbackServer.captured_codes)
             ):
                 if not totp_done:
-                    totp_done = handle_totp_challenge(
-                        page, totp_secret, totp_attempted_counters
-                    )
+                    totp_done = handle_totp_challenge(page, totp_secret, totp_attempted_counters)
                 if not phone_verification_done:
                     phone_verification_done = handle_smspool_phone_challenge(
                         page, smspool_config, smspool_attempted_numbers
@@ -1973,9 +1886,7 @@ def login_account(
                         deadline = time.time() + 45
                 _try_handle_consent()
                 if _is_timeout_screen():
-                    print(
-                        "  [5/5] OpenAI auth timed out after login, retrying current page..."
-                    )
+                    print("  [5/5] OpenAI auth timed out after login, retrying current page...")
                     _retry_timeout_page()
 
             # Also check for any stray "Continue" / "Accept" buttons on unknown pages
@@ -2025,12 +1936,8 @@ def login_account(
     print("  [DONE] Exchanging code for tokens...")
     tokens = exchange_code_for_tokens(captured_code, redirect_uri, code_verifier)
 
-    stored_email, stored_alias, is_new = add_account_to_store(
-        tokens, alias, force=force
-    )
-    action = (
-        "Added new" if is_new else ("Updated existing" if force else "Kept existing")
-    )
+    stored_email, stored_alias, is_new = add_account_to_store(tokens, alias, force=force)
+    action = "Added new" if is_new else ("Updated existing" if force else "Kept existing")
     print(f"  {action} account {stored_alias}: {stored_email}")
     return stored_email
 
@@ -2104,22 +2011,14 @@ def cmd_login(
             continue
 
         chatgpt_pw = (
-            acc.get("chatgpt_password")
-            or acc.get("password")
-            or defaults.get("chatgpt_password")
+            acc.get("chatgpt_password") or acc.get("password") or defaults.get("chatgpt_password")
         )
         outlook_pw = acc.get("outlook_password")
         totp_secret = (
-            acc.get("totp_secret")
-            or acc.get("2fa_secret")
-            or acc.get("two_factor_secret")
+            acc.get("totp_secret") or acc.get("2fa_secret") or acc.get("two_factor_secret")
         )
         smspool_config = {
-            **(
-                defaults.get("smspool", {})
-                if isinstance(defaults.get("smspool"), dict)
-                else {}
-            ),
+            **(defaults.get("smspool", {}) if isinstance(defaults.get("smspool"), dict) else {}),
             **(acc.get("smspool", {}) if isinstance(acc.get("smspool"), dict) else {}),
         }
 
@@ -2199,9 +2098,7 @@ def cmd_login(
 
 # ── Main ────────────────────────────────────────────────────────────────────
 def main():
-    parser = argparse.ArgumentParser(
-        description="Auto-login for opencode-multi-auth-codex"
-    )
+    parser = argparse.ArgumentParser(description="Auto-login for opencode-multi-auth-codex")
     parser.add_argument("--account", type=int, help="Login by credential index")
     parser.add_argument("--email", type=str, help="Login by email")
     parser.add_argument("--check", action="store_true", help="Check account status")
@@ -2243,9 +2140,7 @@ def main():
 
     if args.email:
         targets = [
-            a
-            for a in accounts
-            if normalize_email(a["email"]) == normalize_email(args.email)
+            a for a in accounts if normalize_email(a["email"]) == normalize_email(args.email)
         ]
         if not targets:
             print(f"[ERROR] Email '{args.email}' not found")

@@ -142,7 +142,9 @@ function refreshAccounts(api: TuiPluginApi, alias?: string): void {
     const updated = results.filter((result) => result.updated).length
     const failures = results.filter((result) => !result.updated)
     if (failures.length === results.length) {
-      throw new Error(failures.map((result) => `${result.alias}: ${result.error || 'check failed'}`).join('; '))
+      throw new Error(
+        failures.map((result) => `${result.alias}: ${result.error || 'check failed'}`).join('; ')
+      )
     }
     return failures.length > 0
       ? `Updated ${updated}; ${failures.length} account check(s) failed`
@@ -177,7 +179,9 @@ function refreshAccessTokens(api: TuiPluginApi, alias?: string): void {
         try {
           writeCodexAuthForAlias(account.alias)
         } catch (error) {
-          failures.push(`${account.alias}: refreshed, but auth.json sync failed (${errorMessage(error)})`)
+          failures.push(
+            `${account.alias}: refreshed, but auth.json sync failed (${errorMessage(error)})`
+          )
         }
       }
     }
@@ -242,15 +246,24 @@ function showEditNotes(api: TuiPluginApi, alias: string, tagsValue: string): voi
       )}
       onCancel={() => showAccountActions(api, alias)}
       onConfirm={(notesValue) => {
-        const tags = Array.from(new Set(
-          tagsValue.split(',').map((tag) => tag.trim().toLowerCase()).filter(Boolean)
-        ))
+        const tags = Array.from(
+          new Set(
+            tagsValue
+              .split(',')
+              .map((tag) => tag.trim().toLowerCase())
+              .filter(Boolean)
+          )
+        )
         const notes = notesValue.trim()
         updateAccount(alias, {
           tags: tags.length > 0 ? tags : undefined,
           notes: notes || undefined
         })
-        api.ui.toast({ variant: 'success', title: 'Multi-auth', message: `${alias} metadata updated` })
+        api.ui.toast({
+          variant: 'success',
+          title: 'Multi-auth',
+          message: `${alias} metadata updated`
+        })
         showAccountActions(api, alias)
       }}
     />
@@ -318,7 +331,9 @@ function showDetails(api: TuiPluginApi, alias: string): void {
 function toggleAccount(api: TuiPluginApi, account: AccountCredentials): void {
   const disabling = account.enabled !== false
   if (disabling) {
-    const enabledCount = Object.values(loadStore().accounts).filter((candidate) => candidate.enabled !== false).length
+    const enabledCount = Object.values(loadStore().accounts).filter(
+      (candidate) => candidate.enabled !== false
+    ).length
     if (enabledCount <= 1) {
       notifyError(api, 'Cannot disable the last enabled account')
       showAccountActions(api, account.alias)
@@ -327,19 +342,22 @@ function toggleAccount(api: TuiPluginApi, account: AccountCredentials): void {
   }
   if (disabling && getForceState().forcedAlias === account.alias) clearForce()
 
-  updateAccount(account.alias, disabling
-    ? {
-        enabled: false,
-        disabledAt: Date.now(),
-        disabledBy: 'tui',
-        disableReason: 'Disabled from OpenCode TUI'
-      }
-    : {
-        enabled: true,
-        disabledAt: undefined,
-        disabledBy: undefined,
-        disableReason: undefined
-      })
+  updateAccount(
+    account.alias,
+    disabling
+      ? {
+          enabled: false,
+          disabledAt: Date.now(),
+          disabledBy: 'tui',
+          disableReason: 'Disabled from OpenCode TUI'
+        }
+      : {
+          enabled: true,
+          disabledAt: undefined,
+          disabledBy: undefined,
+          disableReason: undefined
+        }
+  )
 
   api.ui.toast({
     variant: 'success',
@@ -408,17 +426,26 @@ function showAccountActions(api: TuiPluginApi, alias: string): void {
       value: 'use-on-device',
       description: 'Write this account to the device Codex auth.json'
     },
-    { title: 'Check usage and health', value: 'check', description: 'Refresh limits from the usage API/probe' },
+    {
+      title: 'Check usage and health',
+      value: 'check',
+      description: 'Refresh limits from the usage API/probe'
+    },
     {
       title: 'Refresh OAuth token',
       value: 'refresh-token',
-      description: account.refreshToken ? 'Exchange the refresh token for fresh credentials' : 'No refresh token available',
+      description: account.refreshToken
+        ? 'Exchange the refresh token for fresh credentials'
+        : 'No refresh token available',
       disabled: !account.refreshToken
     },
     {
       title: 'Re-authenticate account',
       value: 'reauth',
-      description: account.enabled === false ? 'Enable this account first' : 'Open browser OAuth for this alias',
+      description:
+        account.enabled === false
+          ? 'Enable this account first'
+          : 'Open browser OAuth for this alias',
       disabled: account.enabled === false
     },
     {
@@ -434,9 +461,16 @@ function showAccountActions(api: TuiPluginApi, alias: string): void {
     {
       title: account.enabled === false ? 'Enable account' : 'Disable account',
       value: 'toggle',
-      description: account.enabled === false ? 'Return this account to rotation' : 'Exclude this account from rotation'
+      description:
+        account.enabled === false
+          ? 'Return this account to rotation'
+          : 'Exclude this account from rotation'
     },
-    { title: 'Remove account', value: 'remove', description: 'Delete local credentials for this alias' },
+    {
+      title: 'Remove account',
+      value: 'remove',
+      description: 'Delete local credentials for this alias'
+    },
     { title: 'Back to accounts', value: 'back' }
   ]
 

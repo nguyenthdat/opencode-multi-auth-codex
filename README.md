@@ -123,6 +123,7 @@ If you prefer config-based installation, OpenCode also supports:
 ```
 
 Package:
+
 - npm: [@nguyenthdat/opencode-multi-auth-codex](https://www.npmjs.com/package/@nguyenthdat/opencode-multi-auth-codex)
 - repo: [nguyenthdat/opencode-multi-auth-codex](https://github.com/nguyenthdat/opencode-multi-auth-codex)
 
@@ -172,6 +173,7 @@ opencode plugin github:nguyenthdat/opencode-multi-auth-codex --global
 ```
 
 OpenCode support:
+
 - the plugin backfills `gpt-5.6-sol`, `gpt-5.6-terra`, and `gpt-5.6-luna`
 - reasoning levels are OpenCode variants on each base model, not separate model IDs
 - each GPT-5.6 family model exposes `none`, `low`, `medium`, `high`, `xhigh`, `max`, and `fast`
@@ -191,6 +193,7 @@ export OPENCODE_MULTI_AUTH_INJECT_MODELS=0
 ```
 
 Update existing installs:
+
 - package install: rerun `opencode plugin @nguyenthdat/opencode-multi-auth-codex@latest --global`
 - GitHub install: rerun `opencode plugin github:nguyenthdat/opencode-multi-auth-codex --global`
 - restart OpenCode after updating the plugin
@@ -263,11 +266,13 @@ uv run playwright install chromium
 ### Setup
 
 1. Create a private JSON credentials file:
+
    ```bash
    install -m 600 auto-login/credentials.example.json auto-login/credentials.json
    ```
 
 2. Edit `auto-login/credentials.json` with your accounts:
+
    ```json
    {
      "defaults": {
@@ -277,8 +282,8 @@ uv run playwright install chromium
          "service": 671,
          "pricing_option": 0,
          "max_price": "0.50",
-          "timeout_seconds": 180,
-          "max_orders": 3
+         "timeout_seconds": 180,
+         "max_orders": 3
        }
      },
      "accounts": [
@@ -310,11 +315,13 @@ uv run playwright install chromium
    ```
 
 3. Alternatively, create a private pipe-delimited account file:
+
    ```bash
    install -m 600 auto-login/accounts.example.txt auto-login/accounts.txt
    ```
 
    Its format is:
+
    ```text
    |email|password|2mfa secret key|
    |one@example.com|password-one|JBSWY3DPEHPK3PXP|
@@ -325,6 +332,7 @@ uv run playwright install chromium
    `1. |email|password|secret|` are accepted.
 
 4. Create a private root `.env` file and set the SMSPool key:
+
    ```bash
    install -m 600 .env.example .env
    ```
@@ -415,12 +423,12 @@ available `codex-NN` name.
 
 Outlook login often shows interstitial pages after password entry:
 
-| Page | Handled by |
-|------|-----------|
-| "Stay signed in?" | Auto-clicks "Yes" |
-| "Let's protect your account" | Auto-clicks "Skip for now" |
+| Page                                   | Handled by                       |
+| -------------------------------------- | -------------------------------- |
+| "Stay signed in?"                      | Auto-clicks "Yes"                |
+| "Let's protect your account"           | Auto-clicks "Skip for now"       |
 | FIDO/Passkey creation (`/fido/create`) | Auto-clicks "Not now" / "Cancel" |
-| Any other blocker | Force-navigates to inbox |
+| Any other blocker                      | Force-navigates to inbox         |
 
 ### Troubleshooting
 
@@ -526,9 +534,11 @@ dashboard's **Force update** button, to refresh that account explicitly.
 The plugin can route older Codex selections to the latest Codex backend model when you explicitly opt in.
 
 Default behavior:
+
 - exact model selection is preserved
 
 Environment variables:
+
 - `OPENCODE_MULTI_AUTH_PREFER_CODEX_LATEST=1` enables mapping to the latest backend model
 - `OPENCODE_MULTI_AUTH_CODEX_LATEST_MODEL=gpt-5.5` overrides the mapping target, for example to roll back from the default `gpt-5.6-sol`
 - `OPENCODE_MULTI_AUTH_DEBUG=1` prints model mapping debug logs

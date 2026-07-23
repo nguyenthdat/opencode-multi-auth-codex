@@ -46,7 +46,10 @@ function isWeekly(limit?: SessionRateLimit): boolean {
   return minutes >= 1000
 }
 
-function buildWindow(limit: SessionRateLimit | undefined, eventTs?: number): RateLimitWindow | undefined {
+function buildWindow(
+  limit: SessionRateLimit | undefined,
+  eventTs?: number
+): RateLimitWindow | undefined {
   if (!limit) return undefined
   const used = limit.used_percent
   const remaining = typeof used === 'number' ? Math.max(0, 100 - used) : undefined

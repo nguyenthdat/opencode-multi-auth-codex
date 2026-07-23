@@ -27,12 +27,12 @@ describe('Force Mode', () => {
       OPENCODE_MULTI_AUTH_STORE_DIR: TEST_DIR,
       OPENCODE_MULTI_AUTH_STORE_FILE: TEST_STORE_FILE
     }
-    
+
     // Create test directory
     if (!fs.existsSync(TEST_DIR)) {
       fs.mkdirSync(TEST_DIR, { recursive: true })
     }
-    
+
     // Initialize empty store with version 2 by writing directly to file
     const emptyStore = {
       version: 2,
@@ -139,7 +139,7 @@ describe('Force Mode', () => {
       saveStore(store)
 
       const result = activateForce('test-account', 'test-actor')
-      
+
       expect(result.success).toBe(true)
       expect(result.state?.forcedAlias).toBe('test-account')
       expect(result.state?.forcedBy).toBe('test-actor')
@@ -153,14 +153,14 @@ describe('Force Mode', () => {
       saveStore(store)
 
       activateForce('test-account')
-      
+
       const state = getForceState()
       expect(state.previousRotationStrategy).toBe('least-used')
     })
 
     it('should return error for non-existent account', () => {
       const result = activateForce('non-existent')
-      
+
       expect(result.success).toBe(false)
       expect(result.error).toContain('not found')
     })
@@ -171,7 +171,7 @@ describe('Force Mode', () => {
       saveStore(store)
 
       const result = activateForce('test-account')
-      
+
       expect(result.success).toBe(false)
       expect(result.error).toContain('disabled')
     })
@@ -184,7 +184,7 @@ describe('Force Mode', () => {
 
       activateForce('account1', 'actor1')
       const result = activateForce('account2', 'actor2')
-      
+
       expect(result.success).toBe(true)
       expect(result.state?.forcedAlias).toBe('account2')
       expect(result.state?.forcedBy).toBe('actor2')
@@ -214,7 +214,7 @@ describe('Force Mode', () => {
 
       activateForce('test-account')
       const result = clearForce()
-      
+
       expect(result.success).toBe(true)
       expect(result.restoredStrategy).toBe('weighted-round-robin')
       expect(isForceActive()).toBe(false)
@@ -227,7 +227,7 @@ describe('Force Mode', () => {
 
       activateForce('test-account', 'test-actor')
       clearForce()
-      
+
       const state = getForceState()
       expect(state.forcedAlias).toBeNull()
       expect(state.forcedUntil).toBeNull()
@@ -261,7 +261,7 @@ describe('Force Mode', () => {
 
       activateForce('test-account')
       const result = checkAndAutoClearForce()
-      
+
       expect(result.wasCleared).toBe(false)
       expect(isForceActive()).toBe(true)
     })
@@ -275,7 +275,7 @@ describe('Force Mode', () => {
       saveStore(store)
 
       const result = checkAndAutoClearForce()
-      
+
       expect(result.wasCleared).toBe(true)
       expect(result.reason).toBe('expired')
     })
@@ -286,16 +286,16 @@ describe('Force Mode', () => {
       saveStore(store)
 
       activateForce('test-account')
-      
+
       // Reload store to get updated force state
       store = loadStore()
-      
+
       // Remove the account
       delete store.accounts['test-account']
       saveStore(store)
 
       const result = checkAndAutoClearForce()
-      
+
       expect(result.wasCleared).toBe(true)
       expect(result.reason).toBe('account_removed')
     })
@@ -306,16 +306,16 @@ describe('Force Mode', () => {
       saveStore(store)
 
       activateForce('test-account')
-      
+
       // Reload store to get updated force state
       store = loadStore()
-      
+
       // Disable the account
       store.accounts['test-account'].enabled = false
       saveStore(store)
 
       const result = checkAndAutoClearForce()
-      
+
       expect(result.wasCleared).toBe(true)
       expect(result.reason).toBe('account_disabled')
     })
@@ -327,16 +327,16 @@ describe('Force Mode', () => {
       saveStore(store)
 
       activateForce('test-account')
-      
+
       // Reload store to get updated force state
       store = loadStore()
-      
+
       // Rate limit the account
       store.accounts['test-account'].rateLimitedUntil = now + 60 * 60 * 1000
       saveStore(store)
 
       const result = checkAndAutoClearForce()
-      
+
       expect(result.wasCleared).toBe(false)
       expect(result.reason).toBeUndefined()
     })
@@ -347,16 +347,16 @@ describe('Force Mode', () => {
       saveStore(store)
 
       activateForce('test-account')
-      
+
       // Reload store to get updated force state
       store = loadStore()
-      
+
       // Invalidate auth
       store.accounts['test-account'].authInvalid = true
       saveStore(store)
 
       const result = checkAndAutoClearForce()
-      
+
       expect(result.wasCleared).toBe(false)
       expect(result.reason).toBeUndefined()
     })
@@ -374,7 +374,7 @@ describe('Force Mode', () => {
 
       activateForce('test-account')
       const remaining = getRemainingForceTimeMs()
-      
+
       // Allow for some time passage during test execution
       expect(remaining).toBeGreaterThanOrEqual(0)
       expect(remaining).toBeLessThanOrEqual(24 * 60 * 60 * 1000)

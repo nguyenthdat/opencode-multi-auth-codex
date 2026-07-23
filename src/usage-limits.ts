@@ -60,7 +60,10 @@ function getUsageBaseUrl(): string {
   return baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl
 }
 
-function mapWindow(window: UsageWindowSnapshot | null | undefined, now: number): RateLimitWindow | undefined {
+function mapWindow(
+  window: UsageWindowSnapshot | null | undefined,
+  now: number
+): RateLimitWindow | undefined {
   if (!window) return undefined
   const usedPercent = typeof window.used_percent === 'number' ? window.used_percent : undefined
   const resetAt =
@@ -85,7 +88,9 @@ function mapWindow(window: UsageWindowSnapshot | null | undefined, now: number):
 function pickRateLimitDetails(payload: UsagePayload): UsageRateLimitDetails | null {
   if (payload.rate_limit) return payload.rate_limit
 
-  const additional = Array.isArray(payload.additional_rate_limits) ? payload.additional_rate_limits : []
+  const additional = Array.isArray(payload.additional_rate_limits)
+    ? payload.additional_rate_limits
+    : []
   const preferred = additional.find((entry) => {
     const feature = entry.metered_feature?.trim().toLowerCase()
     const limitName = entry.limit_name?.trim().toLowerCase()
@@ -125,10 +130,7 @@ export function classifyUsageApiFailure(
   rawText: string
 ): UsageApiFailureClassification {
   const { code, message } = parseUsageFailure(rawText)
-  const normalized = [code, message, rawText.trim()]
-    .filter(Boolean)
-    .join(' ')
-    .toLowerCase()
+  const normalized = [code, message, rawText.trim()].filter(Boolean).join(' ').toLowerCase()
 
   if (status === 401) {
     return {
@@ -149,10 +151,7 @@ export function classifyUsageApiFailure(
 
   if (
     status === 402 &&
-    (
-      normalized.includes('deactivated_workspace') ||
-      normalized.includes('deactivated workspace')
-    )
+    (normalized.includes('deactivated_workspace') || normalized.includes('deactivated workspace'))
   ) {
     return {
       shouldProbeFallback: false,
@@ -212,8 +211,7 @@ export async function fetchUsageRateLimitsForAccount(
     }
 
     const isCloudflareChallenge =
-      res.status === 403 &&
-      rawText.trimStart().slice(0, 16).toLowerCase().includes('<html')
+      res.status === 403 && rawText.trimStart().slice(0, 16).toLowerCase().includes('<html')
     if (!isCloudflareChallenge || attempt === maxAttempts - 1) break
     await new Promise((resolve) => setTimeout(resolve, 1000 + attempt * 2000))
   }
@@ -260,9 +258,10 @@ export async function fetchUsageRateLimitsForAccount(
     }
   }
 
-  const rateLimitedUntil = details?.limit_reached || details?.allowed === false
-    ? getBlockingRateLimitResetAt(rateLimits, now)
-    : undefined
+  const rateLimitedUntil =
+    details?.limit_reached || details?.allowed === false
+      ? getBlockingRateLimitResetAt(rateLimits, now)
+      : undefined
 
   return {
     source: 'usage-api',

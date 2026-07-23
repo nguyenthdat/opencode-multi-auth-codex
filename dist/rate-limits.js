@@ -35,9 +35,7 @@ function parseTimestamp(value) {
     return undefined;
 }
 function parseHumanDate(value) {
-    const normalized = value
-        .replace(/\b(\d{1,2})(st|nd|rd|th)\b/gi, '$1')
-        .trim();
+    const normalized = value.replace(/\b(\d{1,2})(st|nd|rd|th)\b/gi, '$1').trim();
     const parsed = Date.parse(normalized);
     if (!Number.isNaN(parsed))
         return parsed;
@@ -63,8 +61,7 @@ function ensureWindow(update, key, now) {
 export function hasMeaningfulRateLimitWindow(window) {
     if (!window)
         return false;
-    return (typeof window.remaining === 'number' ||
-        typeof window.resetAt === 'number');
+    return typeof window.remaining === 'number' || typeof window.resetAt === 'number';
 }
 export function hasMeaningfulRateLimits(rateLimits) {
     if (!rateLimits)
@@ -190,10 +187,7 @@ export function isRateLimitErrorText(text) {
 export function getBlockingRateLimitResetAt(rateLimits, now = Date.now(), opts) {
     if (!rateLimits)
         return undefined;
-    const windows = [
-        rateLimits.fiveHour,
-        rateLimits.weekly
-    ];
+    const windows = [rateLimits.fiveHour, rateLimits.weekly];
     const exhaustedResets = [];
     const futureResets = [];
     let sawKnownRemaining = false;

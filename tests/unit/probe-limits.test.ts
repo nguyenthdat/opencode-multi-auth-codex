@@ -1,9 +1,9 @@
 import { calculateLimitsConfidence, type LimitsConfidence } from '../../src/types.js'
-import { 
-  shouldRetryWithFallback, 
-  getProbeEffort, 
+import {
+  shouldRetryWithFallback,
+  getProbeEffort,
   getProbeModels,
-  type ProbeResult 
+  type ProbeResult
 } from '../../src/probe-limits.js'
 
 describe('Phase C: Limits Accuracy - Probe Authority', () => {
@@ -145,11 +145,7 @@ describe('Phase C: Limits Accuracy - Probe Authority', () => {
 
     it('should prefer the GPT-5.6 family in the default list', () => {
       const models = getProbeModels()
-      expect(models.slice(0, 3)).toEqual([
-        'gpt-5.6-sol',
-        'gpt-5.6-terra',
-        'gpt-5.6-luna'
-      ])
+      expect(models.slice(0, 3)).toEqual(['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'])
       expect(models).toContain('gpt-5.5')
       expect(models).toContain('gpt-5.4')
       expect(models).toContain('gpt-5.3-codex')

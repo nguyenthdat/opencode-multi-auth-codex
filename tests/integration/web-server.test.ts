@@ -54,25 +54,41 @@ beforeAll(async () => {
   }
   fs.mkdirSync(SANDBOX_ROOT, { recursive: true })
   fs.writeFileSync(AUTH_FILE, JSON.stringify({ OPENAI_API_KEY: null, tokens: {} }, null, 2))
-  fs.writeFileSync(AUTO_LOGIN_CREDENTIALS_FILE, JSON.stringify({
-    accounts: [{ alias: 'saved-login', email: 'existing@example.com', chatgpt_password: 'placeholder' }]
-  }, null, 2))
-  fs.writeFileSync(STORE_FILE, JSON.stringify({
-    version: 2,
-    accounts: {
-      'codex-01': {
-        alias: 'codex-01',
-        email: 'existing@example.com',
-        accessToken: 'access-token',
-        refreshToken: 'refresh-token',
-        expiresAt: Date.now() + 60_000,
-        usageCount: 0
-      }
-    },
-    activeAlias: 'codex-01',
-    rotationIndex: 0,
-    lastRotation: Date.now()
-  }, null, 2))
+  fs.writeFileSync(
+    AUTO_LOGIN_CREDENTIALS_FILE,
+    JSON.stringify(
+      {
+        accounts: [
+          { alias: 'saved-login', email: 'existing@example.com', chatgpt_password: 'placeholder' }
+        ]
+      },
+      null,
+      2
+    )
+  )
+  fs.writeFileSync(
+    STORE_FILE,
+    JSON.stringify(
+      {
+        version: 2,
+        accounts: {
+          'codex-01': {
+            alias: 'codex-01',
+            email: 'existing@example.com',
+            accessToken: 'access-token',
+            refreshToken: 'refresh-token',
+            expiresAt: Date.now() + 60_000,
+            usageCount: 0
+          }
+        },
+        activeAlias: 'codex-01',
+        rotationIndex: 0,
+        lastRotation: Date.now()
+      },
+      null,
+      2
+    )
+  )
 
   process.env = {
     ...originalEnv,
@@ -102,7 +118,9 @@ afterAll(() => {
 
 describe('web server hardening', () => {
   it('rejects non-loopback host binding', () => {
-    expect(() => startWebConsole({ host: '0.0.0.0', port: 4120 })).toThrow(/LOCALHOST_ONLY|localhost/i)
+    expect(() => startWebConsole({ host: '0.0.0.0', port: 4120 })).toThrow(
+      /LOCALHOST_ONLY|localhost/i
+    )
   })
 
   it('returns 400 for invalid JSON and keeps server alive', async () => {

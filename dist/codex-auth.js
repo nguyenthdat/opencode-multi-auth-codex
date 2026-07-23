@@ -45,7 +45,7 @@ export function writeCodexAuthFile(auth) {
 function normalizeTokens(auth) {
     if (!auth || typeof auth !== 'object')
         return null;
-    const tokens = (auth.tokens && typeof auth.tokens === 'object') ? auth.tokens : auth;
+    const tokens = auth.tokens && typeof auth.tokens === 'object' ? auth.tokens : auth;
     const accessToken = tokens.access_token ??
         tokens.accessToken ??
         tokens.access ??
@@ -58,16 +58,8 @@ function normalizeTokens(auth) {
         auth.refresh_token ??
         auth.refreshToken ??
         auth.refresh;
-    const idToken = tokens.id_token ??
-        tokens.idToken ??
-        tokens.id ??
-        auth.id_token ??
-        auth.idToken ??
-        auth.id;
-    const accountId = tokens.account_id ??
-        tokens.accountId ??
-        auth.account_id ??
-        auth.accountId;
+    const idToken = tokens.id_token ?? tokens.idToken ?? tokens.id ?? auth.id_token ?? auth.idToken ?? auth.id;
+    const accountId = tokens.account_id ?? tokens.accountId ?? auth.account_id ?? auth.accountId;
     const lastRefresh = auth.last_refresh ?? auth.lastRefresh;
     const result = {
         accessToken: typeof accessToken === 'string' ? accessToken : undefined,
@@ -194,7 +186,9 @@ export function getCodexAuthSummary() {
     const accessClaims = access ? decodeJwtPayload(access) : null;
     const idClaims = idToken ? decodeJwtPayload(idToken) : null;
     const email = getEmailFromClaims(idClaims) || getEmailFromClaims(accessClaims);
-    const accountId = normalized?.accountId || getAccountIdFromClaims(idClaims) || getAccountIdFromClaims(accessClaims);
+    const accountId = normalized?.accountId ||
+        getAccountIdFromClaims(idClaims) ||
+        getAccountIdFromClaims(accessClaims);
     const accountUserId = getAccountUserIdFromClaims(accessClaims) || getAccountUserIdFromClaims(idClaims);
     const userId = getUserIdFromClaims(accessClaims) || getUserIdFromClaims(idClaims);
     const planType = getPlanTypeFromClaims(accessClaims) || getPlanTypeFromClaims(idClaims);
@@ -238,7 +232,9 @@ export function syncCodexAuthFile() {
         const accessClaims = normalized?.accessToken ? decodeJwtPayload(normalized.accessToken) : null;
         const idClaims = normalized?.idToken ? decodeJwtPayload(normalized.idToken) : null;
         const email = getEmailFromClaims(idClaims) || getEmailFromClaims(accessClaims);
-        const accountId = normalized?.accountId || getAccountIdFromClaims(idClaims) || getAccountIdFromClaims(accessClaims);
+        const accountId = normalized?.accountId ||
+            getAccountIdFromClaims(idClaims) ||
+            getAccountIdFromClaims(accessClaims);
         return {
             alias: null,
             added: false,

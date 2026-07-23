@@ -90,22 +90,29 @@ interface AccountHealth {
 }
 
 function evaluateAccountHealth(acc: AccountCredentials, now: number): AccountHealth {
-  const wasRateLimited: boolean = !!(acc.rateLimitedUntil && acc.rateLimitedUntil > now - HEALTH_HYSTERESIS_MS)
-  const wasModelUnsupported: boolean = !!(acc.modelUnsupportedUntil && acc.modelUnsupportedUntil > now - HEALTH_HYSTERESIS_MS)
-  const wasWorkspaceDeactivated: boolean = !!(acc.workspaceDeactivatedUntil && acc.workspaceDeactivatedUntil > now - HEALTH_HYSTERESIS_MS)
-  
+  const wasRateLimited: boolean = !!(
+    acc.rateLimitedUntil && acc.rateLimitedUntil > now - HEALTH_HYSTERESIS_MS
+  )
+  const wasModelUnsupported: boolean = !!(
+    acc.modelUnsupportedUntil && acc.modelUnsupportedUntil > now - HEALTH_HYSTERESIS_MS
+  )
+  const wasWorkspaceDeactivated: boolean = !!(
+    acc.workspaceDeactivatedUntil && acc.workspaceDeactivatedUntil > now - HEALTH_HYSTERESIS_MS
+  )
+
   // Phase D: Check if account is disabled
   const isDisabled: boolean = acc.enabled === false
-  
-  const currentlyBlocked: boolean = 
+
+  const currentlyBlocked: boolean =
     !!(acc.rateLimitedUntil && acc.rateLimitedUntil > now) ||
     !!(acc.modelUnsupportedUntil && acc.modelUnsupportedUntil > now) ||
     !!(acc.workspaceDeactivatedUntil && acc.workspaceDeactivatedUntil > now) ||
     !!acc.authInvalid ||
     isDisabled // Phase D: Exclude disabled accounts
 
-  const isInProbation: boolean = !currentlyBlocked && (wasRateLimited || wasModelUnsupported || wasWorkspaceDeactivated)
-  
+  const isInProbation: boolean =
+    !currentlyBlocked && (wasRateLimited || wasModelUnsupported || wasWorkspaceDeactivated)
+
   let recentFailures = 0
   if (acc.lastLimitErrorAt && acc.lastLimitErrorAt > now - RECENT_FAILURE_WINDOW_MS) {
     recentFailures++
@@ -121,7 +128,7 @@ function evaluateAccountHealth(acc: AccountCredentials, now: number): AccountHea
   if (currentlyBlocked) priority = 0
   // Phase D: Disabled accounts get lowest priority
   if (isDisabled) priority = -1
-  
+
   return {
     alias: acc.alias,
     isHealthy: !currentlyBlocked && !acc.authInvalid && !isDisabled,
@@ -140,11 +147,11 @@ export async function getNextAccount(
   if (autoClear.wasCleared) {
     console.log(`[multi-auth] Force mode auto-cleared: ${autoClear.reason}`)
   }
-  
+
   // Phase E: Check if force mode is active
   const forceActive = isForceActive()
   const forceState = getForceState()
-  
+
   let store = loadStore()
   const aliases = Object.keys(store.accounts)
 
@@ -161,15 +168,15 @@ export async function getNextAccount(
   }
 
   const now = Date.now()
-  
+
   // Phase E: If force mode is active, never fall back to another alias.
   if (forceActive && forceState.forcedAlias) {
     const forcedAlias = forceState.forcedAlias
     const forcedAccount = store.accounts[forcedAlias]
-    
+
     if (forcedAccount) {
       const health = evaluateAccountHealth(forcedAccount, now)
-      
+
       if (health.isHealthy) {
         const token = await ensureValidToken(forcedAlias)
         if (token) {
@@ -178,11 +185,11 @@ export async function getNextAccount(
             lastUsed: now,
             limitError: undefined
           })
-          
+
           store.activeAlias = forcedAlias
           store.lastRotation = now
           saveStore(store)
-          
+
           console.log(`[multi-auth] Force mode: using ${forcedAlias}`)
           return {
             account: store.accounts[forcedAlias],
@@ -194,7 +201,9 @@ export async function getNextAccount(
             }
           }
         } else {
-          console.warn(`[multi-auth] Force mode: ${forcedAlias} token unavailable; refusing fallback`)
+          console.warn(
+            `[multi-auth] Force mode: ${forcedAlias} token unavailable; refusing fallback`
+          )
           return null
         }
       } else {
@@ -207,14 +216,14 @@ export async function getNextAccount(
       clearForce()
     }
   }
-  
+
   const healthMap = new Map<string, AccountHealth>()
   for (const alias of aliases) {
     const acc = store.accounts[alias]
     healthMap.set(alias, evaluateAccountHealth(acc, now))
   }
 
-  const availableAliases = aliases.filter(alias => {
+  const availableAliases = aliases.filter((alias) => {
     const health = healthMap.get(alias)
     return health?.isHealthy === true
   })
@@ -234,7 +243,9 @@ export async function getNextAccount(
   const runtimeSettings = getRuntimeSettings()
   const rotationStrategy = runtimeSettings.settings.rotationStrategy || config.rotationStrategy
 
-  const buildCandidates = (candidateAliases: string[]): { aliases: string[]; nextIndex?: (selected: string) => number } => {
+  const buildCandidates = (
+    candidateAliases: string[]
+  ): { aliases: string[]; nextIndex?: (selected: string) => number } => {
     switch (rotationStrategy) {
       case 'least-used': {
         const sorted = [...candidateAliases].sort((a, b) => {
@@ -242,10 +253,10 @@ export async function getNextAccount(
           const bb = store.accounts[b]
           const healthA = healthMap.get(a)
           const healthB = healthMap.get(b)
-          
+
           const priorityDiff = (healthB?.priority || 0) - (healthA?.priority || 0)
           if (priorityDiff !== 0) return priorityDiff
-          
+
           const usageDiff = (aa?.usageCount || 0) - (bb?.usageCount || 0)
           if (usageDiff !== 0) return usageDiff
           const lastDiff = (aa?.lastUsed || 0) - (bb?.lastUsed || 0)
@@ -266,10 +277,10 @@ export async function getNextAccount(
       // Phase F: Weighted round-robin
       case 'weighted-round-robin': {
         const weights = runtimeSettings.settings.accountWeights
-        
+
         // Filter to healthy accounts with weights
-        const weightedAliases = candidateAliases.filter(alias => (weights[alias] || 0) > 0)
-        
+        const weightedAliases = candidateAliases.filter((alias) => (weights[alias] || 0) > 0)
+
         if (weightedAliases.length === 0) {
           // Fallback to round-robin if no weights defined
           const sorted = [...candidateAliases].sort((a, b) => {
@@ -278,9 +289,7 @@ export async function getNextAccount(
             return (healthB?.priority || 0) - (healthA?.priority || 0)
           })
           const start = store.rotationIndex % sorted.length
-          const rr = sorted.map(
-            (_, i) => sorted[(start + i) % sorted.length]
-          )
+          const rr = sorted.map((_, i) => sorted[(start + i) % sorted.length])
           const nextIndex = (selected: string): number => {
             const idx = sorted.indexOf(selected)
             if (idx < 0) return store.rotationIndex
@@ -288,7 +297,7 @@ export async function getNextAccount(
           }
           return { aliases: rr, nextIndex }
         }
-        
+
         // Use weighted selection
         const selected = calculateWeightedSelection(weightedAliases, weights)
         if (!selected) {
@@ -299,12 +308,10 @@ export async function getNextAccount(
             return (healthB?.priority || 0) - (healthA?.priority || 0)
           })
           const start = store.rotationIndex % sorted.length
-          const rr = sorted.map(
-            (_, i) => sorted[(start + i) % sorted.length]
-          )
+          const rr = sorted.map((_, i) => sorted[(start + i) % sorted.length])
           return { aliases: rr }
         }
-        
+
         return { aliases: [selected] }
       }
       case 'round-robin':
@@ -315,9 +322,7 @@ export async function getNextAccount(
           return (healthB?.priority || 0) - (healthA?.priority || 0)
         })
         const start = store.rotationIndex % sorted.length
-        const rr = sorted.map(
-          (_, i) => sorted[(start + i) % sorted.length]
-        )
+        const rr = sorted.map((_, i) => sorted[(start + i) % sorted.length])
         const nextIndex = (selected: string): number => {
           const idx = sorted.indexOf(selected)
           if (idx < 0) return store.rotationIndex
@@ -330,7 +335,8 @@ export async function getNextAccount(
 
   const { primaryAliases, fallbackAliases } = getPreferredPools(store, availableAliases, selection)
   const primary = buildCandidates(primaryAliases)
-  const fallback = fallbackAliases.length > 0 ? buildCandidates(fallbackAliases) : { aliases: [] as string[] }
+  const fallback =
+    fallbackAliases.length > 0 ? buildCandidates(fallbackAliases) : { aliases: [] as string[] }
   const candidates = [...primary.aliases, ...fallback.aliases]
 
   for (const candidate of candidates) {

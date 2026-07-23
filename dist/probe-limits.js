@@ -81,14 +81,12 @@ function readProbeAuthTokens(codexHome) {
     const accountId = accountIdFromToken ||
         asString(authAccess?.chatgpt_account_id) ||
         asString(authId?.chatgpt_account_id);
-    const accountUserId = asString(authAccess?.chatgpt_account_user_id) ||
-        asString(authId?.chatgpt_account_user_id);
+    const accountUserId = asString(authAccess?.chatgpt_account_user_id) || asString(authId?.chatgpt_account_user_id);
     const userId = asString(authAccess?.user_id) ||
         asString(authAccess?.chatgpt_user_id) ||
         asString(authId?.user_id) ||
         asString(authId?.chatgpt_user_id);
-    const planType = asString(authAccess?.chatgpt_plan_type) ||
-        asString(authId?.chatgpt_plan_type);
+    const planType = asString(authAccess?.chatgpt_plan_type) || asString(authId?.chatgpt_plan_type);
     const email = getEmailFromClaims(idClaims) || getEmailFromClaims(accessClaims);
     const exp = accessClaims?.exp ?? idClaims?.exp;
     const expiresAt = typeof exp === 'number' ? exp * 1000 : undefined;
@@ -214,14 +212,7 @@ export function getProbeModels() {
 }
 async function runCodexExec(codexHome, model, effort) {
     return new Promise((resolve) => {
-        const args = [
-            'exec',
-            '--skip-git-repo-check',
-            '--cd',
-            codexHome,
-            '--sandbox',
-            'read-only'
-        ];
+        const args = ['exec', '--skip-git-repo-check', '--cd', codexHome, '--sandbox', 'read-only'];
         if (model) {
             args.push('-m', model);
         }

@@ -149,13 +149,20 @@ function showEditNotes(api, alias, tagsValue) {
     }
     const DialogPrompt = api.ui.DialogPrompt;
     replaceDialog(api, 'large', () => (_jsx(DialogPrompt, { title: `Edit notes for ${alias}`, value: account.notes || '', placeholder: "Optional account notes", description: () => (_jsx("text", { fg: api.theme.current.textMuted, wrapMode: "word", children: "Step 2 of 2. Submit an empty value to clear the notes." })), onCancel: () => showAccountActions(api, alias), onConfirm: (notesValue) => {
-            const tags = Array.from(new Set(tagsValue.split(',').map((tag) => tag.trim().toLowerCase()).filter(Boolean)));
+            const tags = Array.from(new Set(tagsValue
+                .split(',')
+                .map((tag) => tag.trim().toLowerCase())
+                .filter(Boolean)));
             const notes = notesValue.trim();
             updateAccount(alias, {
                 tags: tags.length > 0 ? tags : undefined,
                 notes: notes || undefined
             });
-            api.ui.toast({ variant: 'success', title: 'Multi-auth', message: `${alias} metadata updated` });
+            api.ui.toast({
+                variant: 'success',
+                title: 'Multi-auth',
+                message: `${alias} metadata updated`
+            });
             showAccountActions(api, alias);
         } })));
 }
@@ -277,17 +284,25 @@ function showAccountActions(api, alias) {
             value: 'use-on-device',
             description: 'Write this account to the device Codex auth.json'
         },
-        { title: 'Check usage and health', value: 'check', description: 'Refresh limits from the usage API/probe' },
+        {
+            title: 'Check usage and health',
+            value: 'check',
+            description: 'Refresh limits from the usage API/probe'
+        },
         {
             title: 'Refresh OAuth token',
             value: 'refresh-token',
-            description: account.refreshToken ? 'Exchange the refresh token for fresh credentials' : 'No refresh token available',
+            description: account.refreshToken
+                ? 'Exchange the refresh token for fresh credentials'
+                : 'No refresh token available',
             disabled: !account.refreshToken
         },
         {
             title: 'Re-authenticate account',
             value: 'reauth',
-            description: account.enabled === false ? 'Enable this account first' : 'Open browser OAuth for this alias',
+            description: account.enabled === false
+                ? 'Enable this account first'
+                : 'Open browser OAuth for this alias',
             disabled: account.enabled === false
         },
         {
@@ -303,9 +318,15 @@ function showAccountActions(api, alias) {
         {
             title: account.enabled === false ? 'Enable account' : 'Disable account',
             value: 'toggle',
-            description: account.enabled === false ? 'Return this account to rotation' : 'Exclude this account from rotation'
+            description: account.enabled === false
+                ? 'Return this account to rotation'
+                : 'Exclude this account from rotation'
         },
-        { title: 'Remove account', value: 'remove', description: 'Delete local credentials for this alias' },
+        {
+            title: 'Remove account',
+            value: 'remove',
+            description: 'Delete local credentials for this alias'
+        },
         { title: 'Back to accounts', value: 'back' }
     ];
     const DialogSelect = api.ui.DialogSelect;

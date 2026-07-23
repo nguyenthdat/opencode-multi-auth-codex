@@ -60,7 +60,9 @@ function resolveRefreshQueueConcurrency(targetCount: number): number {
 
   const raw = process.env[REFRESH_QUEUE_CONCURRENCY_ENV]
   const parsed = raw ? Number(raw) : DEFAULT_REFRESH_QUEUE_CONCURRENCY
-  const normalized = Number.isFinite(parsed) ? Math.floor(parsed) : DEFAULT_REFRESH_QUEUE_CONCURRENCY
+  const normalized = Number.isFinite(parsed)
+    ? Math.floor(parsed)
+    : DEFAULT_REFRESH_QUEUE_CONCURRENCY
 
   return Math.max(1, Math.min(targetCount, Math.min(normalized, MAX_REFRESH_QUEUE_CONCURRENCY)))
 }
@@ -128,7 +130,10 @@ async function runQueue(
   if (queueState && stopRequested && nextIndexRef.value < targets.length) {
     for (let idx = nextIndexRef.value; idx < targets.length; idx += 1) {
       const account = targets[idx]
-      dependencies.updateAccount(account.alias, { limitStatus: 'stopped', limitError: 'Stopped by user' })
+      dependencies.updateAccount(account.alias, {
+        limitStatus: 'stopped',
+        limitError: 'Stopped by user'
+      })
       queueState.results.push({ alias: account.alias, updated: false, error: 'Stopped' })
       queueState.completed += 1
     }
@@ -186,7 +191,9 @@ export function startRefreshQueue(
     dependencies.updateAccount(account.alias, { limitStatus: 'queued', limitError: undefined })
   }
 
-  dependencies.logInfo(`Limit refresh queue started (${targets.length} accounts, concurrency ${concurrency})`)
+  dependencies.logInfo(
+    `Limit refresh queue started (${targets.length} accounts, concurrency ${concurrency})`
+  )
   void runQueue(targets, dependencies)
 
   return queueState

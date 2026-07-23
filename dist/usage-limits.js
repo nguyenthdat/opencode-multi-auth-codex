@@ -28,7 +28,9 @@ function mapWindow(window, now) {
 function pickRateLimitDetails(payload) {
     if (payload.rate_limit)
         return payload.rate_limit;
-    const additional = Array.isArray(payload.additional_rate_limits) ? payload.additional_rate_limits : [];
+    const additional = Array.isArray(payload.additional_rate_limits)
+        ? payload.additional_rate_limits
+        : [];
     const preferred = additional.find((entry) => {
         const feature = entry.metered_feature?.trim().toLowerCase();
         const limitName = entry.limit_name?.trim().toLowerCase();
@@ -61,10 +63,7 @@ function parseUsageFailure(rawText) {
 }
 export function classifyUsageApiFailure(status, rawText) {
     const { code, message } = parseUsageFailure(rawText);
-    const normalized = [code, message, rawText.trim()]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase();
+    const normalized = [code, message, rawText.trim()].filter(Boolean).join(' ').toLowerCase();
     if (status === 401) {
         return {
             shouldProbeFallback: false,
@@ -81,8 +80,7 @@ export function classifyUsageApiFailure(status, rawText) {
         };
     }
     if (status === 402 &&
-        (normalized.includes('deactivated_workspace') ||
-            normalized.includes('deactivated workspace'))) {
+        (normalized.includes('deactivated_workspace') || normalized.includes('deactivated workspace'))) {
         return {
             shouldProbeFallback: false,
             workspaceDeactivated: true,
@@ -133,8 +131,7 @@ export async function fetchUsageRateLimitsForAccount(account) {
         catch {
             rawText = '';
         }
-        const isCloudflareChallenge = res.status === 403 &&
-            rawText.trimStart().slice(0, 16).toLowerCase().includes('<html');
+        const isCloudflareChallenge = res.status === 403 && rawText.trimStart().slice(0, 16).toLowerCase().includes('<html');
         if (!isCloudflareChallenge || attempt === maxAttempts - 1)
             break;
         await new Promise((resolve) => setTimeout(resolve, 1000 + attempt * 2000));

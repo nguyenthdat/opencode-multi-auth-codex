@@ -181,7 +181,8 @@ const STRATEGY_HELP: Record<RotationStrategy, string> = {
   'round-robin': 'Cycle through enabled accounts in order.',
   'least-used': 'Prefer the enabled account with the lowest usage count.',
   random: 'Randomly pick from healthy accounts for each request.',
-  'weighted-round-robin': 'Split requests by account weights while skipping limited or disabled accounts.'
+  'weighted-round-robin':
+    'Split requests by account weights while skipping limited or disabled accounts.'
 }
 
 async function api<T>(endpoint: string, options?: RequestInit): Promise<T> {
@@ -199,9 +200,10 @@ async function api<T>(endpoint: string, options?: RequestInit): Promise<T> {
     }
   }
   if (!response.ok) {
-    const message = payload && typeof payload === 'object' && 'error' in payload
-      ? String(payload.error)
-      : String(payload || 'Request failed')
+    const message =
+      payload && typeof payload === 'object' && 'error' in payload
+        ? String(payload.error)
+        : String(payload || 'Request failed')
     throw new Error(message)
   }
   return payload as T
@@ -232,15 +234,25 @@ function formatRelative(value?: string | number | null): string {
 }
 
 function remainingPercent(window?: RateLimitWindow): number | null {
-  if (!window || typeof window.remaining !== 'number' || typeof window.limit !== 'number' || window.limit <= 0) {
+  if (
+    !window ||
+    typeof window.remaining !== 'number' ||
+    typeof window.limit !== 'number' ||
+    window.limit <= 0
+  ) {
     return null
   }
   return Math.round((window.remaining / window.limit) * 100)
 }
 
-function sortAccounts(accounts: DashboardAccount[], mode: string, recommendedAlias?: string | null): DashboardAccount[] {
+function sortAccounts(
+  accounts: DashboardAccount[],
+  mode: string,
+  recommendedAlias?: string | null
+): DashboardAccount[] {
   const result = [...accounts]
-  const byAlias = (left: DashboardAccount, right: DashboardAccount) => left.alias.localeCompare(right.alias)
+  const byAlias = (left: DashboardAccount, right: DashboardAccount) =>
+    left.alias.localeCompare(right.alias)
   if (mode === 'fiveHour' || mode === 'weekly') {
     result.sort((left, right) => {
       const leftValue = remainingPercent(left.rateLimits?.[mode]) ?? -1
@@ -253,7 +265,10 @@ function sortAccounts(accounts: DashboardAccount[], mode: string, recommendedAli
     result.sort((left, right) => {
       const leftTimestamp = Date.parse(left.lastRefresh || '')
       const rightTimestamp = Date.parse(right.lastRefresh || '')
-      return (Number.isFinite(rightTimestamp) ? rightTimestamp : 0) - (Number.isFinite(leftTimestamp) ? leftTimestamp : 0)
+      return (
+        (Number.isFinite(rightTimestamp) ? rightTimestamp : 0) -
+        (Number.isFinite(leftTimestamp) ? leftTimestamp : 0)
+      )
     })
   } else if (mode === 'alias') {
     result.sort(byAlias)
@@ -267,7 +282,12 @@ function sortAccounts(accounts: DashboardAccount[], mode: string, recommendedAli
   return result
 }
 
-function SwitchControl({ checked, disabled, label, onChange }: {
+function SwitchControl({
+  checked,
+  disabled,
+  label,
+  onChange
+}: {
   checked: boolean
   disabled?: boolean
   label: string
@@ -282,13 +302,18 @@ function SwitchControl({ checked, disabled, label, onChange }: {
       disabled={disabled}
       onClick={() => onChange(!checked)}
     >
-      <span className="switch-track" aria-hidden="true"><span /></span>
+      <span className="switch-track" aria-hidden="true">
+        <span />
+      </span>
       <span className="switch-label">{label}</span>
     </button>
   )
 }
 
-function Sparkline({ history, windowKey }: {
+function Sparkline({
+  history,
+  windowKey
+}: {
   history?: RateLimitHistoryEntry[]
   windowKey: 'fiveHour' | 'weekly'
 }) {
@@ -307,7 +332,10 @@ function Sparkline({ history, windowKey }: {
   const height = 32
   const step = width / (values.length - 1)
   const points = values
-    .map((entry, index) => `${(index * step).toFixed(1)},${(height - (entry.value / 100) * height).toFixed(1)}`)
+    .map(
+      (entry, index) =>
+        `${(index * step).toFixed(1)},${(height - (entry.value / 100) * height).toFixed(1)}`
+    )
     .join(' ')
   const current = values.at(-1)!
   const previous = values.at(-2)!
@@ -319,12 +347,21 @@ function Sparkline({ history, windowKey }: {
       <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" aria-hidden="true">
         <polyline points={points} fill="none" vectorEffect="non-scaling-stroke" />
       </svg>
-      <span>{rate > 0 ? '+' : ''}{rate.toFixed(1)}%/h</span>
+      <span>
+        {rate > 0 ? '+' : ''}
+        {rate.toFixed(1)}%/h
+      </span>
     </div>
   )
 }
 
-function QuotaCard({ label, window, history, windowKey, confidence }: {
+function QuotaCard({
+  label,
+  window,
+  history,
+  windowKey,
+  confidence
+}: {
   label: string
   window?: RateLimitWindow
   history?: RateLimitHistoryEntry[]
@@ -334,41 +371,81 @@ function QuotaCard({ label, window, history, windowKey, confidence }: {
   const isKnown = Boolean(window) && confidence !== 'unknown'
   const percent = isKnown ? remainingPercent(window) : null
   const safePercent = Math.max(0, Math.min(100, percent || 0))
-  const capacityClass = percent === null ? 'is-unknown' : safePercent <= 20 ? 'is-critical' : safePercent <= 50 ? 'is-warning' : 'is-healthy'
-  const remaining = isKnown && window && typeof window.remaining === 'number'
-    ? window.limit === 100 ? `${window.remaining}%` : `${window.remaining} / ${window.limit ?? '-'}`
-    : '--'
+  const capacityClass =
+    percent === null
+      ? 'is-unknown'
+      : safePercent <= 20
+        ? 'is-critical'
+        : safePercent <= 50
+          ? 'is-warning'
+          : 'is-healthy'
+  const remaining =
+    isKnown && window && typeof window.remaining === 'number'
+      ? window.limit === 100
+        ? `${window.remaining}%`
+        : `${window.remaining} / ${window.limit ?? '-'}`
+      : '--'
 
   return (
     <section className={`quota-card ${capacityClass}`} aria-label={`${label} quota`}>
       <div className="quota-heading">
         <span>{label}</span>
-        {confidence && confidence !== 'fresh' && <span className={`confidence confidence-${confidence}`}>{confidence}</span>}
+        {confidence && confidence !== 'fresh' && (
+          <span className={`confidence confidence-${confidence}`}>{confidence}</span>
+        )}
       </div>
-      <div className="quota-value"><strong>{remaining}</strong><span>remaining</span></div>
-      <div className="quota-meter" role="progressbar" aria-label={`${label} remaining`} aria-valuenow={percent === null ? undefined : safePercent} aria-valuemin={0} aria-valuemax={100}>
+      <div className="quota-value">
+        <strong>{remaining}</strong>
+        <span>remaining</span>
+      </div>
+      <div
+        className="quota-meter"
+        role="progressbar"
+        aria-label={`${label} remaining`}
+        aria-valuenow={percent === null ? undefined : safePercent}
+        aria-valuemin={0}
+        aria-valuemax={100}
+      >
         <span style={{ width: `${safePercent}%` }} />
       </div>
       <div className="quota-details">
-        <span>Reset <strong>{formatDate(window?.resetAt)}</strong></span>
-        <span>Updated <strong>{formatRelative(window?.updatedAt)}</strong></span>
+        <span>
+          Reset <strong>{formatDate(window?.resetAt)}</strong>
+        </span>
+        <span>
+          Updated <strong>{formatRelative(window?.updatedAt)}</strong>
+        </span>
       </div>
       <Sparkline history={history} windowKey={windowKey} />
     </section>
   )
 }
 
-function AccountCard({ account, active, recommended, busyAction, onAction, onToggle, onSaveMeta }: {
+function AccountCard({
+  account,
+  active,
+  recommended,
+  busyAction,
+  onAction,
+  onToggle,
+  onSaveMeta
+}: {
   account: DashboardAccount
   active: boolean
   recommended: boolean
   busyAction: string | null
-  onAction: (alias: string, action: 'switch' | 'refresh-token' | 'refresh' | 'remove' | 'reauth') => Promise<void>
+  onAction: (
+    alias: string,
+    action: 'switch' | 'refresh-token' | 'refresh' | 'remove' | 'reauth'
+  ) => Promise<void>
   onToggle: (alias: string, enabled: boolean) => Promise<void>
   onSaveMeta: (alias: string, tags: string, notes: string) => Promise<boolean>
 }) {
   const enabled = account.enabled !== false
-  const [optimisticEnabled, setOptimisticEnabled] = useOptimistic(enabled, (_current, next: boolean) => next)
+  const [optimisticEnabled, setOptimisticEnabled] = useOptimistic(
+    enabled,
+    (_current, next: boolean) => next
+  )
   const [editing, setEditing] = useState(false)
   const [tags, setTags] = useState((account.tags || []).join(', '))
   const [notes, setNotes] = useState(account.notes || '')
@@ -395,53 +472,117 @@ function AccountCard({ account, active, recommended, busyAction, onAction, onTog
   }
 
   return (
-    <article className={`account-card${active ? ' is-active' : ''}${recommended ? ' is-recommended' : ''}${optimisticEnabled ? '' : ' is-disabled'}`} aria-labelledby={headingId}>
+    <article
+      className={`account-card${active ? ' is-active' : ''}${recommended ? ' is-recommended' : ''}${optimisticEnabled ? '' : ' is-disabled'}`}
+      aria-labelledby={headingId}
+    >
       <header className="account-header">
         <div className="account-identity">
-          <span className="account-monogram" aria-hidden="true">{monogram}</span>
+          <span className="account-monogram" aria-hidden="true">
+            {monogram}
+          </span>
           <div>
             <h3 id={headingId}>{account.alias}</h3>
-            <p title={account.email || account.accountId}>{account.email || account.accountId || 'Unknown account'}</p>
+            <p title={account.email || account.accountId}>
+              {account.email || account.accountId || 'Unknown account'}
+            </p>
           </div>
         </div>
         <div className="badges">
-          <span className={`badge ${active ? 'badge-active' : ''}`}>{active ? 'On device' : 'Stored'}</span>
+          <span className={`badge ${active ? 'badge-active' : ''}`}>
+            {active ? 'On device' : 'Stored'}
+          </span>
           {recommended && <span className="badge badge-recommended">Recommended</span>}
           <span className={`badge badge-${status}`}>{status === 'success' ? 'OK' : status}</span>
         </div>
       </header>
 
       <dl className="account-facts">
-        <div><dt>Token expires</dt><dd>{formatDate(account.expiresAt)}</dd></div>
-        <div><dt>Last seen</dt><dd>{formatRelative(account.lastSeenAt || account.lastUsed)}</dd></div>
-        <div><dt>Last refresh</dt><dd>{formatRelative(account.lastRefresh)}</dd></div>
-        <div><dt>Usage count</dt><dd>{account.usageCount ?? 0}</dd></div>
+        <div>
+          <dt>Token expires</dt>
+          <dd>{formatDate(account.expiresAt)}</dd>
+        </div>
+        <div>
+          <dt>Last seen</dt>
+          <dd>{formatRelative(account.lastSeenAt || account.lastUsed)}</dd>
+        </div>
+        <div>
+          <dt>Last refresh</dt>
+          <dd>{formatRelative(account.lastRefresh)}</dd>
+        </div>
+        <div>
+          <dt>Usage count</dt>
+          <dd>{account.usageCount ?? 0}</dd>
+        </div>
       </dl>
 
       {account.limitError && <div className="inline-alert">Limit error: {account.limitError}</div>}
 
       <div className="quota-grid">
-        <QuotaCard label="5 hour" window={account.rateLimits?.fiveHour} history={account.rateLimitHistory} windowKey="fiveHour" confidence={account.limitsConfidence} />
-        <QuotaCard label="Weekly" window={account.rateLimits?.weekly} history={account.rateLimitHistory} windowKey="weekly" confidence={account.limitsConfidence} />
+        <QuotaCard
+          label="5 hour"
+          window={account.rateLimits?.fiveHour}
+          history={account.rateLimitHistory}
+          windowKey="fiveHour"
+          confidence={account.limitsConfidence}
+        />
+        <QuotaCard
+          label="Weekly"
+          window={account.rateLimits?.weekly}
+          history={account.rateLimitHistory}
+          windowKey="weekly"
+          confidence={account.limitsConfidence}
+        />
       </div>
 
       <footer className="account-footer">
         <div className="tag-line">
           <div className="tags">
-            {(account.tags || []).length > 0
-              ? account.tags!.map((tag) => <span className="tag" key={tag}>{tag}</span>)
-              : <span className="empty-copy">No tags</span>}
+            {(account.tags || []).length > 0 ? (
+              account.tags!.map((tag) => (
+                <span className="tag" key={tag}>
+                  {tag}
+                </span>
+              ))
+            ) : (
+              <span className="empty-copy">No tags</span>
+            )}
           </div>
-          <button type="button" className="button button-quiet button-small" disabled={busyAction !== null} onClick={() => editing ? setEditing(false) : beginEditing()}>
+          <button
+            type="button"
+            className="button button-quiet button-small"
+            disabled={busyAction !== null}
+            onClick={() => (editing ? setEditing(false) : beginEditing())}
+          >
             {editing ? 'Close editor' : 'Edit details'}
           </button>
         </div>
 
         {editing ? (
           <div className="meta-editor">
-            <label>Tags<input value={tags} onChange={(event) => setTags(event.target.value)} placeholder="work, reserve" /></label>
-            <label>Notes<textarea rows={3} value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Account notes" /></label>
-            <button type="button" className="button button-secondary" disabled={isBusy('meta')} onClick={() => void saveMetadata()}>
+            <label>
+              Tags
+              <input
+                value={tags}
+                onChange={(event) => setTags(event.target.value)}
+                placeholder="work, reserve"
+              />
+            </label>
+            <label>
+              Notes
+              <textarea
+                rows={3}
+                value={notes}
+                onChange={(event) => setNotes(event.target.value)}
+                placeholder="Account notes"
+              />
+            </label>
+            <button
+              type="button"
+              className="button button-secondary"
+              disabled={isBusy('meta')}
+              onClick={() => void saveMetadata()}
+            >
               {isBusy('meta') ? 'Saving...' : 'Save details'}
             </button>
           </div>
@@ -456,16 +597,54 @@ function AccountCard({ account, active, recommended, busyAction, onAction, onTog
             label={optimisticEnabled ? 'Enabled' : 'Disabled'}
             onChange={toggleAccount}
           />
-          <button type="button" className="button button-secondary" aria-label={`Re-authenticate ${account.alias}`} disabled={!optimisticEnabled || busyAction !== null} onClick={() => void onAction(account.alias, 'reauth')}>
+          <button
+            type="button"
+            className="button button-secondary"
+            aria-label={`Re-authenticate ${account.alias}`}
+            disabled={!optimisticEnabled || busyAction !== null}
+            onClick={() => void onAction(account.alias, 'reauth')}
+          >
             {isBusy('reauth') ? 'Waiting for OAuth...' : 'Re-authenticate'}
           </button>
         </div>
 
         <div className="account-actions">
-          <button type="button" className="button" aria-label={`Use ${account.alias} on device`} disabled={busyAction !== null} onClick={() => void onAction(account.alias, 'switch')}>{isBusy('switch') ? 'Switching...' : 'Use on device'}</button>
-          <button type="button" className="button button-secondary" aria-label={`Refresh token for ${account.alias}`} disabled={busyAction !== null} onClick={() => void onAction(account.alias, 'refresh-token')}>{isBusy('refresh-token') ? 'Refreshing...' : 'Refresh token'}</button>
-          <button type="button" className="button button-secondary" aria-label={`Refresh limits for ${account.alias}`} disabled={busyAction !== null} onClick={() => void onAction(account.alias, 'refresh')}>{isBusy('refresh') ? 'Queued...' : 'Refresh limits'}</button>
-          <button type="button" className="button button-danger" aria-label={`Remove ${account.alias}`} disabled={busyAction !== null} onClick={() => void onAction(account.alias, 'remove')}>{isBusy('remove') ? 'Removing...' : 'Remove'}</button>
+          <button
+            type="button"
+            className="button"
+            aria-label={`Use ${account.alias} on device`}
+            disabled={busyAction !== null}
+            onClick={() => void onAction(account.alias, 'switch')}
+          >
+            {isBusy('switch') ? 'Switching...' : 'Use on device'}
+          </button>
+          <button
+            type="button"
+            className="button button-secondary"
+            aria-label={`Refresh token for ${account.alias}`}
+            disabled={busyAction !== null}
+            onClick={() => void onAction(account.alias, 'refresh-token')}
+          >
+            {isBusy('refresh-token') ? 'Refreshing...' : 'Refresh token'}
+          </button>
+          <button
+            type="button"
+            className="button button-secondary"
+            aria-label={`Refresh limits for ${account.alias}`}
+            disabled={busyAction !== null}
+            onClick={() => void onAction(account.alias, 'refresh')}
+          >
+            {isBusy('refresh') ? 'Queued...' : 'Refresh limits'}
+          </button>
+          <button
+            type="button"
+            className="button button-danger"
+            aria-label={`Remove ${account.alias}`}
+            disabled={busyAction !== null}
+            onClick={() => void onAction(account.alias, 'remove')}
+          >
+            {isBusy('remove') ? 'Removing...' : 'Remove'}
+          </button>
         </div>
       </footer>
     </article>
@@ -474,7 +653,9 @@ function AccountCard({ account, active, recommended, busyAction, onAction, onTog
 
 function Overview({ state }: { state: DashboardState }) {
   const storeLabel = state.storeStatus.encrypted
-    ? state.storeStatus.locked ? 'Encrypted / locked' : 'Encrypted'
+    ? state.storeStatus.locked
+      ? 'Encrypted / locked'
+      : 'Encrypted'
     : 'Plain'
   const autoLoginLabel = state.autoLogin?.configured
     ? `${state.autoLogin.accounts.length} configured`
@@ -494,13 +675,17 @@ function Overview({ state }: { state: DashboardState }) {
   return (
     <section className="overview-section" aria-labelledby="overview-title">
       <div className="section-heading">
-        <div><span className="eyebrow">Fleet health</span><h2 id="overview-title">Live account overview</h2></div>
+        <div>
+          <span className="eyebrow">Fleet health</span>
+          <h2 id="overview-title">Live account overview</h2>
+        </div>
         <p>Local state, active identity, store health, and sync readiness.</p>
       </div>
       <div className="metric-grid">
         {items.map(([label, value], index) => (
           <article className={`metric-card metric-${index + 1}`} key={label} title={value}>
-            <span>{label}</span><strong>{value}</strong>
+            <span>{label}</span>
+            <strong>{value}</strong>
           </article>
         ))}
       </div>
@@ -508,23 +693,71 @@ function Overview({ state }: { state: DashboardState }) {
   )
 }
 
-function QueueStatus({ queue, onStop }: { queue?: RefreshQueue | null; onStop: () => Promise<unknown> }) {
-  if (!queue) return <div className="command-status"><span className="status-dot" />No refresh activity</div>
+function QueueStatus({
+  queue,
+  onStop
+}: {
+  queue?: RefreshQueue | null
+  onStop: () => Promise<unknown>
+}) {
+  if (!queue)
+    return (
+      <div className="command-status">
+        <span className="status-dot" />
+        No refresh activity
+      </div>
+    )
   const percent = queue.total > 0 ? Math.round((queue.completed / queue.total) * 100) : 0
   const current = queue.currentAliases?.length ? queue.currentAliases.join(', ') : 'None'
   return (
     <div className="queue-status">
       <div className="queue-copy">
-        <strong>{queue.running ? 'Refreshing account limits' : queue.stopped ? 'Refresh stopped' : 'Refresh complete'}</strong>
-        <span>{queue.completed}/{queue.total} complete / {queue.errors} errors / Parallel: {queue.active || 0}/{queue.concurrency || 0} / Current: {current}</span>
+        <strong>
+          {queue.running
+            ? 'Refreshing account limits'
+            : queue.stopped
+              ? 'Refresh stopped'
+              : 'Refresh complete'}
+        </strong>
+        <span>
+          {queue.completed}/{queue.total} complete / {queue.errors} errors / Parallel:{' '}
+          {queue.active || 0}/{queue.concurrency || 0} / Current: {current}
+        </span>
       </div>
-      <div className="queue-progress" role="progressbar" aria-label="Limit refresh progress" aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${percent}%` }} /></div>
-      {queue.running && <button type="button" className="button button-danger button-small" onClick={() => void onStop()}>Stop</button>}
+      <div
+        className="queue-progress"
+        role="progressbar"
+        aria-label="Limit refresh progress"
+        aria-valuenow={percent}
+        aria-valuemin={0}
+        aria-valuemax={100}
+      >
+        <span style={{ width: `${percent}%` }} />
+      </div>
+      {queue.running && (
+        <button
+          type="button"
+          className="button button-danger button-small"
+          onClick={() => void onStop()}
+        >
+          Stop
+        </button>
+      )}
     </div>
   )
 }
 
-function CommandDeck({ state, busyAction, onSync, onRefreshTokens, onRefreshLimits, onRefresh, onStartLogin, onStartAutoLogin, onStopQueue }: {
+function CommandDeck({
+  state,
+  busyAction,
+  onSync,
+  onRefreshTokens,
+  onRefreshLimits,
+  onRefresh,
+  onStartLogin,
+  onStartAutoLogin,
+  onStopQueue
+}: {
   state: DashboardState
   busyAction: string | null
   onSync: () => Promise<unknown>
@@ -537,7 +770,9 @@ function CommandDeck({ state, busyAction, onSync, onRefreshTokens, onRefreshLimi
 }) {
   const [alias, setAlias] = useState('')
   const [selector, setSelector] = useState('')
-  const autoAccounts = (state.autoLogin?.accounts || []).filter((account) => account.enabled !== false)
+  const autoAccounts = (state.autoLogin?.accounts || []).filter(
+    (account) => account.enabled !== false
+  )
   const loginBusy = Boolean(state.login)
   const selectorValid = autoAccounts.some((account) => account.email === selector)
   const controlsBusy = busyAction !== null || loginBusy
@@ -545,48 +780,146 @@ function CommandDeck({ state, busyAction, onSync, onRefreshTokens, onRefreshLimi
   return (
     <section className="panel command-panel" aria-labelledby="commands-title">
       <div className="section-heading">
-        <div><span className="eyebrow">Command deck</span><h2 id="commands-title">Sync and provision</h2></div>
+        <div>
+          <span className="eyebrow">Command deck</span>
+          <h2 id="commands-title">Sync and provision</h2>
+        </div>
         <p>Bulk maintenance and local identity provisioning.</p>
       </div>
       <div className="command-actions">
-        <button className="button" type="button" disabled={controlsBusy} onClick={() => void onSync()}>{busyAction === 'sync' ? 'Syncing...' : 'Sync auth.json'}</button>
-        <button className="button button-secondary" type="button" disabled={controlsBusy} onClick={() => void onRefreshTokens()}>{busyAction === 'tokens:all' ? 'Refreshing...' : 'Refresh all tokens'}</button>
-        <button className="button button-secondary" type="button" disabled={controlsBusy || Boolean(state.queue?.running)} onClick={() => void onRefreshLimits()}>{busyAction === 'limits:all' ? 'Queueing...' : 'Refresh all limits'}</button>
-        <button className="button button-secondary" type="button" disabled={controlsBusy} onClick={() => void onRefresh()}>{busyAction === 'refresh' ? 'Refreshing...' : 'Refresh dashboard'}</button>
+        <button
+          className="button"
+          type="button"
+          disabled={controlsBusy}
+          onClick={() => void onSync()}
+        >
+          {busyAction === 'sync' ? 'Syncing...' : 'Sync auth.json'}
+        </button>
+        <button
+          className="button button-secondary"
+          type="button"
+          disabled={controlsBusy}
+          onClick={() => void onRefreshTokens()}
+        >
+          {busyAction === 'tokens:all' ? 'Refreshing...' : 'Refresh all tokens'}
+        </button>
+        <button
+          className="button button-secondary"
+          type="button"
+          disabled={controlsBusy || Boolean(state.queue?.running)}
+          onClick={() => void onRefreshLimits()}
+        >
+          {busyAction === 'limits:all' ? 'Queueing...' : 'Refresh all limits'}
+        </button>
+        <button
+          className="button button-secondary"
+          type="button"
+          disabled={controlsBusy}
+          onClick={() => void onRefresh()}
+        >
+          {busyAction === 'refresh' ? 'Refreshing...' : 'Refresh dashboard'}
+        </button>
       </div>
-      <form className="command-form" onSubmit={(event) => { event.preventDefault(); void onStartLogin(alias) }}>
-        <label><span>OAuth alias</span><input value={alias} onChange={(event) => setAlias(event.target.value)} placeholder="New account alias" disabled={loginBusy} /></label>
-        <button className="button button-secondary" type="submit" disabled={controlsBusy}>{busyAction === 'login:start' ? 'Starting...' : 'Start OAuth'}</button>
+      <form
+        className="command-form"
+        onSubmit={(event) => {
+          event.preventDefault()
+          void onStartLogin(alias)
+        }}
+      >
+        <label>
+          <span>OAuth alias</span>
+          <input
+            value={alias}
+            onChange={(event) => setAlias(event.target.value)}
+            placeholder="New account alias"
+            disabled={loginBusy}
+          />
+        </label>
+        <button className="button button-secondary" type="submit" disabled={controlsBusy}>
+          {busyAction === 'login:start' ? 'Starting...' : 'Start OAuth'}
+        </button>
       </form>
-      <form className="command-form" onSubmit={(event) => { event.preventDefault(); void onStartAutoLogin(selector) }}>
-        <label><span>Saved credential</span>
-          <select value={selectorValid ? selector : ''} onChange={(event) => setSelector(event.target.value)} disabled={!state.autoLogin?.configured || controlsBusy}>
+      <form
+        className="command-form"
+        onSubmit={(event) => {
+          event.preventDefault()
+          void onStartAutoLogin(selector)
+        }}
+      >
+        <label>
+          <span>Saved credential</span>
+          <select
+            value={selectorValid ? selector : ''}
+            onChange={(event) => setSelector(event.target.value)}
+            disabled={!state.autoLogin?.configured || controlsBusy}
+          >
             <option value="">Select auto-login account</option>
-            {autoAccounts.map((account) => <option value={account.email} key={account.email}>{account.alias} - {account.email}</option>)}
+            {autoAccounts.map((account) => (
+              <option value={account.email} key={account.email}>
+                {account.alias} - {account.email}
+              </option>
+            ))}
           </select>
         </label>
-        <button className="button button-secondary" type="submit" disabled={!selectorValid || controlsBusy}>{busyAction === 'login:auto' ? 'Starting...' : 'Auto add'}</button>
-        <button className="button button-quiet" type="button" disabled={!selectorValid || controlsBusy} onClick={() => void onStartAutoLogin(selector, true)}>Force update</button>
+        <button
+          className="button button-secondary"
+          type="submit"
+          disabled={!selectorValid || controlsBusy}
+        >
+          {busyAction === 'login:auto' ? 'Starting...' : 'Auto add'}
+        </button>
+        <button
+          className="button button-quiet"
+          type="button"
+          disabled={!selectorValid || controlsBusy}
+          onClick={() => void onStartAutoLogin(selector, true)}
+        >
+          Force update
+        </button>
       </form>
       <QueueStatus queue={state.queue} onStop={onStopQueue} />
-      {(state.lastSyncError || state.storeStatus.error) && <div className="inline-alert">{state.lastSyncError || state.storeStatus.error}</div>}
+      {(state.lastSyncError || state.storeStatus.error) && (
+        <div className="inline-alert">{state.lastSyncError || state.storeStatus.error}</div>
+      )}
       {state.login && (
         <div className="login-progress">
           <span className="status-dot is-live" />
           <div>
             <strong>{state.login.mode === 'auto' ? 'Auto-login' : 'OAuth'} in progress</strong>
-            <span>{state.login.email || state.login.alias || 'Account'} / {state.login.step || 'Waiting for authentication'}</span>
-            {state.login.output && state.login.output.length > 0 && <span className="login-output">{state.login.output.slice(-3).join(' / ')}</span>}
+            <span>
+              {state.login.email || state.login.alias || 'Account'} /{' '}
+              {state.login.step || 'Waiting for authentication'}
+            </span>
+            {state.login.output && state.login.output.length > 0 && (
+              <span className="login-output">{state.login.output.slice(-3).join(' / ')}</span>
+            )}
           </div>
-          {state.login.url && <a href={state.login.url} target="_blank" rel="noreferrer">Open login</a>}
+          {state.login.url && (
+            <a href={state.login.url} target="_blank" rel="noreferrer">
+              Open login
+            </a>
+          )}
         </div>
       )}
-      {state.lastLoginError && !state.login && <div className="inline-alert">Last login failed: {state.lastLoginError}</div>}
+      {state.lastLoginError && !state.login && (
+        <div className="inline-alert">Last login failed: {state.lastLoginError}</div>
+      )}
     </section>
   )
 }
 
-function FilterBar({ search, tags, sort, count, total, onSearch, onTags, onSort, onClear }: {
+function FilterBar({
+  search,
+  tags,
+  sort,
+  count,
+  total,
+  onSearch,
+  onTags,
+  onSort,
+  onClear
+}: {
   search: string
   tags: string
   sort: string
@@ -599,9 +932,24 @@ function FilterBar({ search, tags, sort, count, total, onSearch, onTags, onSort,
 }) {
   return (
     <section className="filter-bar" aria-label="Account filters">
-      <label className="search-field"><span>Search</span><input value={search} onChange={(event) => onSearch(event.target.value)} placeholder="Alias, email, tags, notes" /></label>
-      <label><span>Tags</span><input value={tags} onChange={(event) => onTags(event.target.value)} placeholder="primary, work" /></label>
-      <label><span>Sort</span>
+      <label className="search-field">
+        <span>Search</span>
+        <input
+          value={search}
+          onChange={(event) => onSearch(event.target.value)}
+          placeholder="Alias, email, tags, notes"
+        />
+      </label>
+      <label>
+        <span>Tags</span>
+        <input
+          value={tags}
+          onChange={(event) => onTags(event.target.value)}
+          placeholder="primary, work"
+        />
+      </label>
+      <label>
+        <span>Sort</span>
         <select value={sort} onChange={(event) => onSort(event.target.value)}>
           <option value="recommended">Recommended first</option>
           <option value="fiveHour">5 hour remaining</option>
@@ -611,12 +959,25 @@ function FilterBar({ search, tags, sort, count, total, onSearch, onTags, onSort,
           <option value="alias">Alias</option>
         </select>
       </label>
-      <div className="filter-summary"><span>{count} visible / {total} total</span><button type="button" className="button button-quiet" onClick={onClear}>Clear</button></div>
+      <div className="filter-summary">
+        <span>
+          {count} visible / {total} total
+        </span>
+        <button type="button" className="button button-quiet" onClick={onClear}>
+          Clear
+        </button>
+      </div>
     </section>
   )
 }
 
-function ForcePanel({ state, busyAction, onActivate, onClear, onStrategy }: {
+function ForcePanel({
+  state,
+  busyAction,
+  onActivate,
+  onClear,
+  onStrategy
+}: {
   state: DashboardState
   busyAction: string | null
   onActivate: (alias: string) => Promise<boolean>
@@ -652,28 +1013,76 @@ function ForcePanel({ state, busyAction, onActivate, onClear, onStrategy }: {
       <div className="force-copy">
         <span className="eyebrow">Routing override</span>
         <h2 id="force-title">Force Mode</h2>
-        <p>{force.active ? `Pinned to ${force.alias || 'an account'} for ${force.remainingTime || 'the active window'}.` : 'Temporarily pin every request to one account for up to 24 hours.'}</p>
+        <p>
+          {force.active
+            ? `Pinned to ${force.alias || 'an account'} for ${force.remainingTime || 'the active window'}.`
+            : 'Temporarily pin every request to one account for up to 24 hours.'}
+        </p>
       </div>
       <div className="force-controls">
-        <SwitchControl checked={force.active || arming} disabled={busyAction !== null} label={force.active ? `On / ${force.remainingTime || 'active'}` : arming ? 'Choose account' : 'Off'} onChange={(next) => void toggleForce(next)} />
+        <SwitchControl
+          checked={force.active || arming}
+          disabled={busyAction !== null}
+          label={
+            force.active
+              ? `On / ${force.remainingTime || 'active'}`
+              : arming
+                ? 'Choose account'
+                : 'Off'
+          }
+          onChange={(next) => void toggleForce(next)}
+        />
         {arming && !force.active && (
-          <select aria-label="Account to force" value={selectedAlias} onChange={(event) => void activate(event.target.value)} disabled={busyAction !== null}>
+          <select
+            aria-label="Account to force"
+            value={selectedAlias}
+            onChange={(event) => void activate(event.target.value)}
+            disabled={busyAction !== null}
+          >
             <option value="">Select account</option>
-            {enabledAccounts.map((account) => <option value={account.alias} key={account.alias}>{account.alias}</option>)}
+            {enabledAccounts.map((account) => (
+              <option value={account.alias} key={account.alias}>
+                {account.alias}
+              </option>
+            ))}
           </select>
         )}
-        <label><span>Rotation strategy</span>
-          <select value={strategy} disabled={busyAction !== null || force.active} onChange={(event) => void onStrategy(event.target.value as RotationStrategy)}>
-            {Object.keys(STRATEGY_HELP).map((value) => <option value={value} key={value}>{value}</option>)}
+        <label>
+          <span>Rotation strategy</span>
+          <select
+            value={strategy}
+            disabled={busyAction !== null || force.active}
+            onChange={(event) => void onStrategy(event.target.value as RotationStrategy)}
+          >
+            {Object.keys(STRATEGY_HELP).map((value) => (
+              <option value={value} key={value}>
+                {value}
+              </option>
+            ))}
           </select>
         </label>
       </div>
-      <div className="strategy-note"><strong>{strategy}</strong><span>{STRATEGY_HELP[strategy]} {force.active ? 'Paused; clearing Force Mode restores the pre-force strategy.' : 'Active now.'}</span></div>
+      <div className="strategy-note">
+        <strong>{strategy}</strong>
+        <span>
+          {STRATEGY_HELP[strategy]}{' '}
+          {force.active
+            ? 'Paused; clearing Force Mode restores the pre-force strategy.'
+            : 'Active now.'}
+        </span>
+      </div>
     </section>
   )
 }
 
-function AntigravityPanel({ state, busyAction, onRefresh, onRefreshActive, onRefreshAll, onCopy }: {
+function AntigravityPanel({
+  state,
+  busyAction,
+  onRefresh,
+  onRefreshActive,
+  onRefreshAll,
+  onCopy
+}: {
   state: DashboardState
   busyAction: string | null
   onRefresh: () => Promise<unknown>
@@ -691,60 +1100,192 @@ function AntigravityPanel({ state, busyAction, onRefresh, onRefreshActive, onRef
   return (
     <section className="panel antigravity-panel" aria-labelledby="antigravity-title">
       <div className="section-heading">
-        <div><span className="eyebrow">Experimental provider</span><h2 id="antigravity-title">Antigravity accounts</h2><p>{antigravity.path || 'Account path unavailable'}</p></div>
+        <div>
+          <span className="eyebrow">Experimental provider</span>
+          <h2 id="antigravity-title">Antigravity accounts</h2>
+          <p>{antigravity.path || 'Account path unavailable'}</p>
+        </div>
         <div className="compact-actions">
-          <button className="button button-secondary" type="button" disabled={busyAction !== null} onClick={() => void onRefresh()}>Refresh state</button>
-          <button className="button button-secondary" type="button" disabled={busyAction !== null} onClick={() => void onRefreshActive()}>Refresh active</button>
-          <button className="button button-secondary" type="button" disabled={busyAction !== null} onClick={() => void onRefreshAll()}>Refresh all</button>
-          <button className="button button-quiet" type="button" onClick={() => void onCopy(antigravity.path || '', 'Path copied')}>Copy path</button>
-          <button className="button button-quiet" type="button" onClick={() => void onCopy('opencode auth login', 'Command copied')}>Copy reauth</button>
+          <button
+            className="button button-secondary"
+            type="button"
+            disabled={busyAction !== null}
+            onClick={() => void onRefresh()}
+          >
+            Refresh state
+          </button>
+          <button
+            className="button button-secondary"
+            type="button"
+            disabled={busyAction !== null}
+            onClick={() => void onRefreshActive()}
+          >
+            Refresh active
+          </button>
+          <button
+            className="button button-secondary"
+            type="button"
+            disabled={busyAction !== null}
+            onClick={() => void onRefreshAll()}
+          >
+            Refresh all
+          </button>
+          <button
+            className="button button-quiet"
+            type="button"
+            onClick={() => void onCopy(antigravity.path || '', 'Path copied')}
+          >
+            Copy path
+          </button>
+          <button
+            className="button button-quiet"
+            type="button"
+            onClick={() => void onCopy('opencode auth login', 'Command copied')}
+          >
+            Copy reauth
+          </button>
         </div>
       </div>
       <div className="ag-metrics">
-        <article><span>Total</span><strong>{accounts.length}</strong></article>
-        <article><span>Active</span><strong>{active?.alias || (active ? `#${active.index}` : 'None')}</strong></article>
-        <article><span>Last read</span><strong>{formatRelative(antigravity.readAt)}</strong></article>
-        <article><span>Quota status</span><strong>{quota.status || 'Idle'}</strong></article>
+        <article>
+          <span>Total</span>
+          <strong>{accounts.length}</strong>
+        </article>
+        <article>
+          <span>Active</span>
+          <strong>{active?.alias || (active ? `#${active.index}` : 'None')}</strong>
+        </article>
+        <article>
+          <span>Last read</span>
+          <strong>{formatRelative(antigravity.readAt)}</strong>
+        </article>
+        <article>
+          <span>Quota status</span>
+          <strong>{quota.status || 'Idle'}</strong>
+        </article>
       </div>
-      {(antigravity.error || quota.error) && <div className="inline-alert">{antigravity.error || quota.error}</div>}
+      {(antigravity.error || quota.error) && (
+        <div className="inline-alert">{antigravity.error || quota.error}</div>
+      )}
       {snapshot && (
         <div className="ag-quota-grid">
-          {snapshot.promptCredits && <QuotaSummary label="Prompt credits" value={`${snapshot.promptCredits.available} / ${snapshot.promptCredits.monthly}`} percent={snapshot.promptCredits.remainingPercentage} />}
+          {snapshot.promptCredits && (
+            <QuotaSummary
+              label="Prompt credits"
+              value={`${snapshot.promptCredits.available} / ${snapshot.promptCredits.monthly}`}
+              percent={snapshot.promptCredits.remainingPercentage}
+            />
+          )}
           {(snapshot.models || []).map((model) => {
-            const percent = typeof model.remainingPercentage === 'number' ? model.remainingPercentage : undefined
-            const reset = model.timeUntilResetFormatted || (model.resetTime ? formatDate(model.resetTime) : 'Unknown reset')
-            return <QuotaSummary key={model.modelId || model.label} label={model.label || model.modelId || 'Model'} value={percent === undefined ? 'Unknown' : `${Math.round(percent)}%`} percent={percent} detail={reset} />
+            const percent =
+              typeof model.remainingPercentage === 'number' ? model.remainingPercentage : undefined
+            const reset =
+              model.timeUntilResetFormatted ||
+              (model.resetTime ? formatDate(model.resetTime) : 'Unknown reset')
+            return (
+              <QuotaSummary
+                key={model.modelId || model.label}
+                label={model.label || model.modelId || 'Model'}
+                value={percent === undefined ? 'Unknown' : `${Math.round(percent)}%`}
+                percent={percent}
+                detail={reset}
+              />
+            )
           })}
         </div>
       )}
       <div className="ag-account-grid">
         {accounts.map((account) => {
           const accountQuota = quota.perAccount?.[account.index]
-          return <article className={`ag-account${account.index === antigravity.activeIndex ? ' is-active' : ''}`} key={account.index}>
-            <header><strong>{account.alias || `#${account.index}`}</strong><span>{account.index === antigravity.activeIndex ? 'Active' : account.hasRefreshToken ? 'Stored' : 'Missing token'}</span></header>
-            <dl>
-              <div><dt>Project</dt><dd>{account.projectId || 'Unknown'}</dd></div>
-              <div><dt>Managed</dt><dd>{account.managedProjectId || 'None'}</dd></div>
-              <div><dt>Added</dt><dd>{formatRelative(account.addedAt)}</dd></div>
-              <div><dt>Last used</dt><dd>{formatRelative(account.lastUsed)}</dd></div>
-              <div><dt>Quota update</dt><dd>{accountQuota ? formatRelative(accountQuota.timestamp) : 'Not loaded'}</dd></div>
-              {accountQuota?.promptCredits && <div><dt>Prompt credits</dt><dd>{accountQuota.promptCredits.available} / {accountQuota.promptCredits.monthly}</dd></div>}
-              {accountQuota?.models?.slice(0, 3).map((model) => <div key={model.modelId || model.label}><dt>{model.label || model.modelId || 'Model'}</dt><dd>{typeof model.remainingPercentage === 'number' ? `${Math.round(model.remainingPercentage)}%` : 'Unknown'}</dd></div>)}
-            </dl>
-          </article>
+          return (
+            <article
+              className={`ag-account${account.index === antigravity.activeIndex ? ' is-active' : ''}`}
+              key={account.index}
+            >
+              <header>
+                <strong>{account.alias || `#${account.index}`}</strong>
+                <span>
+                  {account.index === antigravity.activeIndex
+                    ? 'Active'
+                    : account.hasRefreshToken
+                      ? 'Stored'
+                      : 'Missing token'}
+                </span>
+              </header>
+              <dl>
+                <div>
+                  <dt>Project</dt>
+                  <dd>{account.projectId || 'Unknown'}</dd>
+                </div>
+                <div>
+                  <dt>Managed</dt>
+                  <dd>{account.managedProjectId || 'None'}</dd>
+                </div>
+                <div>
+                  <dt>Added</dt>
+                  <dd>{formatRelative(account.addedAt)}</dd>
+                </div>
+                <div>
+                  <dt>Last used</dt>
+                  <dd>{formatRelative(account.lastUsed)}</dd>
+                </div>
+                <div>
+                  <dt>Quota update</dt>
+                  <dd>{accountQuota ? formatRelative(accountQuota.timestamp) : 'Not loaded'}</dd>
+                </div>
+                {accountQuota?.promptCredits && (
+                  <div>
+                    <dt>Prompt credits</dt>
+                    <dd>
+                      {accountQuota.promptCredits.available} / {accountQuota.promptCredits.monthly}
+                    </dd>
+                  </div>
+                )}
+                {accountQuota?.models?.slice(0, 3).map((model) => (
+                  <div key={model.modelId || model.label}>
+                    <dt>{model.label || model.modelId || 'Model'}</dt>
+                    <dd>
+                      {typeof model.remainingPercentage === 'number'
+                        ? `${Math.round(model.remainingPercentage)}%`
+                        : 'Unknown'}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </article>
+          )
         })}
       </div>
     </section>
   )
 }
 
-function QuotaSummary({ label, value, percent, detail }: { label: string; value: string; percent?: number; detail?: string }) {
+function QuotaSummary({
+  label,
+  value,
+  percent,
+  detail
+}: {
+  label: string
+  value: string
+  percent?: number
+  detail?: string
+}) {
   const safePercent = Math.max(0, Math.min(100, percent || 0))
   return (
     <article className="ag-quota">
-      <span>{label}</span><strong>{value}</strong>
+      <span>{label}</span>
+      <strong>{value}</strong>
       {detail && <small>{detail}</small>}
-      <div role={percent === undefined ? undefined : 'progressbar'} aria-label={percent === undefined ? undefined : `${label} remaining`} aria-valuenow={percent === undefined ? undefined : safePercent} aria-valuemin={percent === undefined ? undefined : 0} aria-valuemax={percent === undefined ? undefined : 100}><span style={{ width: `${safePercent}%` }} /></div>
+      <div
+        role={percent === undefined ? undefined : 'progressbar'}
+        aria-label={percent === undefined ? undefined : `${label} remaining`}
+        aria-valuenow={percent === undefined ? undefined : safePercent}
+        aria-valuemin={percent === undefined ? undefined : 0}
+        aria-valuemax={percent === undefined ? undefined : 100}
+      >
+        <span style={{ width: `${safePercent}%` }} />
+      </div>
     </article>
   )
 }
@@ -753,15 +1294,29 @@ function LogsPanel({ logs, onRefresh }: { logs: LogsState; onRefresh: () => Prom
   return (
     <section className="panel logs-panel" aria-labelledby="logs-title">
       <div className="section-heading">
-        <div><span className="eyebrow">Runtime telemetry</span><h2 id="logs-title">Logs</h2><p>{logs.path || 'Log path unavailable'}</p></div>
-        <button type="button" className="button button-secondary" onClick={() => void onRefresh()}>Refresh logs</button>
+        <div>
+          <span className="eyebrow">Runtime telemetry</span>
+          <h2 id="logs-title">Logs</h2>
+          <p>{logs.path || 'Log path unavailable'}</p>
+        </div>
+        <button type="button" className="button button-secondary" onClick={() => void onRefresh()}>
+          Refresh logs
+        </button>
       </div>
       <pre>{logs.lines?.join('\n') || 'No logs yet.'}</pre>
     </section>
   )
 }
 
-function CreateAccountModal({ open, busy, login, lastError, trackedEmail, onClose, onSubmit }: {
+function CreateAccountModal({
+  open,
+  busy,
+  login,
+  lastError,
+  trackedEmail,
+  onClose,
+  onSubmit
+}: {
   open: boolean
   busy: boolean
   login?: LoginState | null
@@ -805,22 +1360,98 @@ function CreateAccountModal({ open, busy, login, lastError, trackedEmail, onClos
 
   const status = login
     ? `${login.mode === 'auto' ? 'Auto-login' : 'OAuth'}: ${login.step || 'Waiting for authentication'}`
-    : lastError && trackedEmail ? `Add failed: ${lastError}`
-      : trackedEmail ? 'Account saved locally. Complete any verification in the browser.'
+    : lastError && trackedEmail
+      ? `Add failed: ${lastError}`
+      : trackedEmail
+        ? 'Account saved locally. Complete any verification in the browser.'
         : 'Credentials stay in the local auto-login configuration.'
 
   return (
-    <dialog ref={dialogRef} className="modal-backdrop" aria-labelledby="create-account-title" onCancel={(event) => { event.preventDefault(); onClose() }} onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
+    <dialog
+      ref={dialogRef}
+      className="modal-backdrop"
+      aria-labelledby="create-account-title"
+      onCancel={(event) => {
+        event.preventDefault()
+        onClose()
+      }}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose()
+      }}
+    >
       <section className="modal">
-        <header><div><span className="eyebrow">Local provisioning</span><h2 id="create-account-title">Add account</h2></div><button type="button" className="button button-quiet" onClick={onClose}>Close</button></header>
+        <header>
+          <div>
+            <span className="eyebrow">Local provisioning</span>
+            <h2 id="create-account-title">Add account</h2>
+          </div>
+          <button type="button" className="button button-quiet" onClick={onClose}>
+            Close
+          </button>
+        </header>
         <form onSubmit={(event) => void submit(event)}>
-          <label><span>Login / email</span><input ref={emailRef} autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@example.com" disabled={busy} /></label>
-          <label><span>Password</span><input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Account password" disabled={busy} /></label>
-          <label><span>Alias (optional)</span><input value={alias} onChange={(event) => setAlias(event.target.value)} placeholder="Local alias" disabled={busy} /></label>
-          <label><span>ChatGPT password (optional)</span><input type="password" value={chatgptPassword} onChange={(event) => setChatgptPassword(event.target.value)} placeholder="Password override" disabled={busy} /></label>
-          <div className="modal-status"><span className={`status-dot${login ? ' is-live' : ''}`} />{status}</div>
-          {login?.url && <a href={login.url} target="_blank" rel="noreferrer">Open login manually</a>}
-          <div className="modal-actions"><button type="button" className="button button-secondary" onClick={onClose}>Cancel</button><button type="submit" className="button" disabled={busy || !email.trim() || !password.trim()}>{busy ? 'Adding...' : 'Add and log in'}</button></div>
+          <label>
+            <span>Login / email</span>
+            <input
+              ref={emailRef}
+              autoComplete="username"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              placeholder="name@example.com"
+              disabled={busy}
+            />
+          </label>
+          <label>
+            <span>Password</span>
+            <input
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="Account password"
+              disabled={busy}
+            />
+          </label>
+          <label>
+            <span>Alias (optional)</span>
+            <input
+              value={alias}
+              onChange={(event) => setAlias(event.target.value)}
+              placeholder="Local alias"
+              disabled={busy}
+            />
+          </label>
+          <label>
+            <span>ChatGPT password (optional)</span>
+            <input
+              type="password"
+              value={chatgptPassword}
+              onChange={(event) => setChatgptPassword(event.target.value)}
+              placeholder="Password override"
+              disabled={busy}
+            />
+          </label>
+          <div className="modal-status">
+            <span className={`status-dot${login ? ' is-live' : ''}`} />
+            {status}
+          </div>
+          {login?.url && (
+            <a href={login.url} target="_blank" rel="noreferrer">
+              Open login manually
+            </a>
+          )}
+          <div className="modal-actions">
+            <button type="button" className="button button-secondary" onClick={onClose}>
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="button"
+              disabled={busy || !email.trim() || !password.trim()}
+            >
+              {busy ? 'Adding...' : 'Add and log in'}
+            </button>
+          </div>
         </form>
       </section>
     </dialog>
@@ -879,7 +1510,9 @@ function App() {
   useEffect(() => {
     void pollDashboard()
     const timer = window.setInterval(() => void pollDashboard(), pollInterval)
-    const onVisibility = () => { if (!document.hidden) void pollDashboard() }
+    const onVisibility = () => {
+      if (!document.hidden) void pollDashboard()
+    }
     document.addEventListener('visibilitychange', onVisibility)
     return () => {
       window.clearInterval(timer)
@@ -910,7 +1543,11 @@ function App() {
     }
   }
 
-  async function runMutation(key: string, success: string, request: () => Promise<unknown>): Promise<boolean> {
+  async function runMutation(
+    key: string,
+    success: string,
+    request: () => Promise<unknown>
+  ): Promise<boolean> {
     setBusyAction(key)
     try {
       await request()
@@ -931,17 +1568,27 @@ function App() {
     return true
   }
 
-  async function handleAccountAction(alias: string, action: 'switch' | 'refresh-token' | 'refresh' | 'remove' | 'reauth') {
-    if (action === 'remove' && !window.confirm(`Remove ${alias} from the local account store?`)) return
+  async function handleAccountAction(
+    alias: string,
+    action: 'switch' | 'refresh-token' | 'refresh' | 'remove' | 'reauth'
+  ) {
+    if (action === 'remove' && !window.confirm(`Remove ${alias} from the local account store?`))
+      return
     if (action === 'reauth') {
-      const previousRefresh = state?.accounts.find((account) => account.alias === alias)?.lastRefresh
+      const previousRefresh = state?.accounts.find(
+        (account) => account.alias === alias
+      )?.lastRefresh
       const authWindow = window.open('about:blank', '_blank')
       if (authWindow) authWindow.opener = null
       setBusyAction(`reauth:${alias}`)
       try {
-        const result = await api<{ url?: string }>(`/api/accounts/${encodeURIComponent(alias)}/reauth`, {
-          method: 'POST', body: JSON.stringify({ actor: 'dashboard' })
-        })
+        const result = await api<{ url?: string }>(
+          `/api/accounts/${encodeURIComponent(alias)}/reauth`,
+          {
+            method: 'POST',
+            body: JSON.stringify({ actor: 'dashboard' })
+          }
+        )
         if (result.url && authWindow) authWindow.location.replace(result.url)
         else authWindow?.close()
         setToast('OAuth flow opened')
@@ -949,7 +1596,9 @@ function App() {
           await new Promise((resolve) => window.setTimeout(resolve, 2_000))
           const nextState = await refreshDashboard()
           if (!nextState) continue
-          const refreshed = nextState.accounts.find((account) => account.alias === alias)?.lastRefresh
+          const refreshed = nextState.accounts.find(
+            (account) => account.alias === alias
+          )?.lastRefresh
           if (refreshed && refreshed !== previousRefresh) {
             setToast('Re-authentication complete')
             return
@@ -968,9 +1617,12 @@ function App() {
     if (action === 'refresh-token') {
       await runMutation(`refresh-token:${alias}`, 'Token refreshed', async () => {
         const result = await api<TokenRefreshResponse>('/api/token/refresh', {
-          method: 'POST', body: JSON.stringify({ alias })
+          method: 'POST',
+          body: JSON.stringify({ alias })
         })
-        const failure = result.results.find((entry) => entry.alias === alias && (!entry.updated || entry.error))
+        const failure = result.results.find(
+          (entry) => entry.alias === alias && (!entry.updated || entry.error)
+        )
         if (failure) throw new Error(failure.error || `Token refresh failed for ${alias}`)
       })
       return
@@ -982,28 +1634,40 @@ function App() {
       remove: ['/api/remove', 'Account removed']
     } as const
     const [endpoint, success] = endpoints[action]
-    await runMutation(`${action}:${alias}`, success, () => api(endpoint, {
-      method: 'POST', body: JSON.stringify({ alias })
-    }))
+    await runMutation(`${action}:${alias}`, success, () =>
+      api(endpoint, {
+        method: 'POST',
+        body: JSON.stringify({ alias })
+      })
+    )
   }
 
   async function handleToggle(alias: string, enabled: boolean) {
-    await runMutation(`toggle:${alias}`, enabled ? 'Account enabled' : 'Account disabled', () => api(`/api/accounts/${encodeURIComponent(alias)}/enabled`, {
-      method: 'PUT', body: JSON.stringify({ enabled })
-    }))
+    await runMutation(`toggle:${alias}`, enabled ? 'Account enabled' : 'Account disabled', () =>
+      api(`/api/accounts/${encodeURIComponent(alias)}/enabled`, {
+        method: 'PUT',
+        body: JSON.stringify({ enabled })
+      })
+    )
   }
 
   async function handleSaveMeta(alias: string, nextTags: string, notes: string) {
-    return runMutation(`meta:${alias}`, 'Account details saved', () => api('/api/account/meta', {
-      method: 'POST', body: JSON.stringify({ alias, tags: nextTags, notes })
-    }))
+    return runMutation(`meta:${alias}`, 'Account details saved', () =>
+      api('/api/account/meta', {
+        method: 'POST',
+        body: JSON.stringify({ alias, tags: nextTags, notes })
+      })
+    )
   }
 
   async function handleCreateAccount(input: CreateAccountInput) {
     setTrackedEmail(input.email)
-    return runMutation('account:create', 'Account add started', () => api('/api/auto-login/add', {
-      method: 'POST', body: JSON.stringify(input)
-    }))
+    return runMutation('account:create', 'Account add started', () =>
+      api('/api/auto-login/add', {
+        method: 'POST',
+        body: JSON.stringify(input)
+      })
+    )
   }
 
   async function handleCopy(value: string, success: string) {
@@ -1023,105 +1687,277 @@ function App() {
     return (
       <main className="loading-screen">
         <span className="loading-mark">CA</span>
-        <div><span className="eyebrow">Local control plane</span><h1>Loading account fleet</h1><p>{loadError || 'Reading local account and quota state...'}</p></div>
-        <button type="button" className="button button-secondary" onClick={() => void refreshDashboard()}>Retry</button>
+        <div>
+          <span className="eyebrow">Local control plane</span>
+          <h1>Loading account fleet</h1>
+          <p>{loadError || 'Reading local account and quota state...'}</p>
+        </div>
+        <button
+          type="button"
+          className="button button-secondary"
+          onClick={() => void refreshDashboard()}
+        >
+          Retry
+        </button>
       </main>
     )
   }
 
   const searchNeedle = deferredSearch.trim().toLowerCase()
-  const tagNeedles = deferredTags.split(',').map((tag) => tag.trim().toLowerCase()).filter(Boolean)
-  const filteredAccounts = sortAccounts(state.accounts.filter((account) => {
-    const accountTags = (account.tags || []).map((tag) => tag.toLowerCase())
-    const haystack = [account.alias, account.email, account.accountId, account.notes, ...(account.tags || [])].filter(Boolean).join(' ').toLowerCase()
-    return (!searchNeedle || haystack.includes(searchNeedle)) && (tagNeedles.length === 0 || tagNeedles.some((tag) => accountTags.includes(tag)))
-  }), sort, state.recommendedAlias)
+  const tagNeedles = deferredTags
+    .split(',')
+    .map((tag) => tag.trim().toLowerCase())
+    .filter(Boolean)
+  const filteredAccounts = sortAccounts(
+    state.accounts.filter((account) => {
+      const accountTags = (account.tags || []).map((tag) => tag.toLowerCase())
+      const haystack = [
+        account.alias,
+        account.email,
+        account.accountId,
+        account.notes,
+        ...(account.tags || [])
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+      return (
+        (!searchNeedle || haystack.includes(searchNeedle)) &&
+        (tagNeedles.length === 0 || tagNeedles.some((tag) => accountTags.includes(tag)))
+      )
+    }),
+    sort,
+    state.recommendedAlias
+  )
 
   return (
     <div className="app-shell">
       <header className="topbar">
-        <div className="brand-lockup"><span className="brand-mark">CA</span><div><span className="eyebrow">Auth fleet / Local control</span><h1>Codex account control</h1><p>Quota, credentials, and routing without sending control data off-device.</p></div></div>
-        <div className="topbar-actions"><span className={`local-status${loadError ? ' has-error' : ''}`} title={loadError || 'Connected to the local dashboard server'}><span className={`status-dot${loadError ? '' : ' is-live'}`} />{loadError ? 'Connection interrupted' : 'Local only'}</span><button type="button" className="button" disabled={Boolean(state.login)} onClick={() => { setTrackedEmail(''); setModalOpen(true) }}>Add account</button></div>
+        <div className="brand-lockup">
+          <span className="brand-mark">CA</span>
+          <div>
+            <span className="eyebrow">Auth fleet / Local control</span>
+            <h1>Codex account control</h1>
+            <p>Quota, credentials, and routing without sending control data off-device.</p>
+          </div>
+        </div>
+        <div className="topbar-actions">
+          <span
+            className={`local-status${loadError ? ' has-error' : ''}`}
+            title={loadError || 'Connected to the local dashboard server'}
+          >
+            <span className={`status-dot${loadError ? '' : ' is-live'}`} />
+            {loadError ? 'Connection interrupted' : 'Local only'}
+          </span>
+          <button
+            type="button"
+            className="button"
+            disabled={Boolean(state.login)}
+            onClick={() => {
+              setTrackedEmail('')
+              setModalOpen(true)
+            }}
+          >
+            Add account
+          </button>
+        </div>
       </header>
 
       <main className="dashboard">
-        {loadError && <div className="connection-alert" role="alert"><strong>Dashboard updates paused.</strong><span>{loadError}</span><button type="button" className="button button-secondary button-small" onClick={() => void refreshDashboard()}>Retry</button></div>}
+        {loadError && (
+          <div className="connection-alert" role="alert">
+            <strong>Dashboard updates paused.</strong>
+            <span>{loadError}</span>
+            <button
+              type="button"
+              className="button button-secondary button-small"
+              onClick={() => void refreshDashboard()}
+            >
+              Retry
+            </button>
+          </div>
+        )}
         <Overview state={state} />
         <CommandDeck
           state={state}
           busyAction={busyAction}
-          onSync={() => runMutation('sync', 'auth.json synced', () => api('/api/sync', { method: 'POST', body: '{}' }))}
-          onRefreshTokens={() => runMutation('tokens:all', 'All tokens refreshed', async () => {
-            const result = await api<TokenRefreshResponse>('/api/token/refresh', { method: 'POST', body: '{}' })
-            const failures = result.results.filter((entry) => !entry.updated || entry.error)
-            if (failures.length > 0) throw new Error(`${failures.length} of ${result.results.length} token refreshes failed: ${failures[0].error || failures[0].alias}`)
-          })}
-          onRefreshLimits={() => runMutation('limits:all', 'Limit refresh queued', () => api('/api/limits/refresh', { method: 'POST', body: '{}' }))}
+          onSync={() =>
+            runMutation('sync', 'auth.json synced', () =>
+              api('/api/sync', { method: 'POST', body: '{}' })
+            )
+          }
+          onRefreshTokens={() =>
+            runMutation('tokens:all', 'All tokens refreshed', async () => {
+              const result = await api<TokenRefreshResponse>('/api/token/refresh', {
+                method: 'POST',
+                body: '{}'
+              })
+              const failures = result.results.filter((entry) => !entry.updated || entry.error)
+              if (failures.length > 0)
+                throw new Error(
+                  `${failures.length} of ${result.results.length} token refreshes failed: ${failures[0].error || failures[0].alias}`
+                )
+            })
+          }
+          onRefreshLimits={() =>
+            runMutation('limits:all', 'Limit refresh queued', () =>
+              api('/api/limits/refresh', { method: 'POST', body: '{}' })
+            )
+          }
           onRefresh={() => runMutation('refresh', 'Dashboard refreshed', async () => undefined)}
-          onStartLogin={(alias) => runMutation('login:start', 'OAuth flow opened', async () => {
-            const selectedAlias = alias.trim() || `account-${Date.now()}`
-            const authWindow = window.open('about:blank', '_blank')
-            if (authWindow) authWindow.opener = null
-            try {
-              const result = await api<{ url?: string }>('/api/auth/start', { method: 'POST', body: JSON.stringify({ alias: selectedAlias }) })
-              if (result.url && authWindow) authWindow.location.replace(result.url)
-              else authWindow?.close()
-            } catch (error) {
-              authWindow?.close()
-              throw error
-            }
-          })}
-          onStartAutoLogin={(selector, force = false) => runMutation('login:auto', force ? 'Forced auto-login started' : 'Auto-login started', () => api('/api/auto-login/start', { method: 'POST', body: JSON.stringify({ selector, force }) }))}
-          onStopQueue={() => runMutation('queue:stop', 'Stopping refresh queue', () => api('/api/limits/stop', { method: 'POST', body: '{}' }))}
+          onStartLogin={(alias) =>
+            runMutation('login:start', 'OAuth flow opened', async () => {
+              const selectedAlias = alias.trim() || `account-${Date.now()}`
+              const authWindow = window.open('about:blank', '_blank')
+              if (authWindow) authWindow.opener = null
+              try {
+                const result = await api<{ url?: string }>('/api/auth/start', {
+                  method: 'POST',
+                  body: JSON.stringify({ alias: selectedAlias })
+                })
+                if (result.url && authWindow) authWindow.location.replace(result.url)
+                else authWindow?.close()
+              } catch (error) {
+                authWindow?.close()
+                throw error
+              }
+            })
+          }
+          onStartAutoLogin={(selector, force = false) =>
+            runMutation(
+              'login:auto',
+              force ? 'Forced auto-login started' : 'Auto-login started',
+              () =>
+                api('/api/auto-login/start', {
+                  method: 'POST',
+                  body: JSON.stringify({ selector, force })
+                })
+            )
+          }
+          onStopQueue={() =>
+            runMutation('queue:stop', 'Stopping refresh queue', () =>
+              api('/api/limits/stop', { method: 'POST', body: '{}' })
+            )
+          }
         />
 
         <section className="accounts-section" aria-labelledby="accounts-title">
-          <div className="section-heading accounts-heading"><div><span className="eyebrow">Identity roster</span><h2 id="accounts-title">Account fleet</h2></div><p>Inspect quota health and route work to the right identity.</p></div>
-          <FilterBar search={search} tags={tags} sort={sort} count={filteredAccounts.length} total={state.accounts.length} onSearch={setSearch} onTags={setTags} onSort={setSort} onClear={() => { setSearch(''); setTags(''); setSort('recommended') }} />
+          <div className="section-heading accounts-heading">
+            <div>
+              <span className="eyebrow">Identity roster</span>
+              <h2 id="accounts-title">Account fleet</h2>
+            </div>
+            <p>Inspect quota health and route work to the right identity.</p>
+          </div>
+          <FilterBar
+            search={search}
+            tags={tags}
+            sort={sort}
+            count={filteredAccounts.length}
+            total={state.accounts.length}
+            onSearch={setSearch}
+            onTags={setTags}
+            onSort={setSort}
+            onClear={() => {
+              setSearch('')
+              setTags('')
+              setSort('recommended')
+            }}
+          />
           <div className="account-grid">
-            {filteredAccounts.length > 0 ? filteredAccounts.map((account) => (
-              <AccountCard
-                key={account.alias}
-                account={account}
-                active={account.alias === state.deviceAlias}
-                recommended={account.alias === state.recommendedAlias}
-                busyAction={busyAction}
-                onAction={handleAccountAction}
-                onToggle={handleToggle}
-                onSaveMeta={handleSaveMeta}
-              />
-            )) : state.accounts.length === 0
-              ? <div className="empty-state"><span>No accounts yet</span><p>Add an account or sync auth.json to start managing the fleet.</p></div>
-              : <div className="empty-state"><span>No matching accounts</span><p>Adjust the search or tag filters to restore the roster.</p></div>}
+            {filteredAccounts.length > 0 ? (
+              filteredAccounts.map((account) => (
+                <AccountCard
+                  key={account.alias}
+                  account={account}
+                  active={account.alias === state.deviceAlias}
+                  recommended={account.alias === state.recommendedAlias}
+                  busyAction={busyAction}
+                  onAction={handleAccountAction}
+                  onToggle={handleToggle}
+                  onSaveMeta={handleSaveMeta}
+                />
+              ))
+            ) : state.accounts.length === 0 ? (
+              <div className="empty-state">
+                <span>No accounts yet</span>
+                <p>Add an account or sync auth.json to start managing the fleet.</p>
+              </div>
+            ) : (
+              <div className="empty-state">
+                <span>No matching accounts</span>
+                <p>Adjust the search or tag filters to restore the roster.</p>
+              </div>
+            )}
           </div>
         </section>
 
         <ForcePanel
           state={state}
           busyAction={busyAction}
-          onActivate={(alias) => runMutation('force', `Force Mode enabled for ${alias}`, () => api('/api/force', { method: 'POST', body: JSON.stringify({ alias, actor: 'dashboard' }) }))}
-          onClear={() => runMutation('force', 'Force Mode disabled', () => api('/api/force/clear', { method: 'POST' }))}
-          onStrategy={(rotationStrategy) => runMutation('strategy', `Strategy set to ${rotationStrategy}`, () => api('/api/settings', { method: 'PUT', body: JSON.stringify({ rotationStrategy, actor: 'dashboard' }) }))}
+          onActivate={(alias) =>
+            runMutation('force', `Force Mode enabled for ${alias}`, () =>
+              api('/api/force', {
+                method: 'POST',
+                body: JSON.stringify({ alias, actor: 'dashboard' })
+              })
+            )
+          }
+          onClear={() =>
+            runMutation('force', 'Force Mode disabled', () =>
+              api('/api/force/clear', { method: 'POST' })
+            )
+          }
+          onStrategy={(rotationStrategy) =>
+            runMutation('strategy', `Strategy set to ${rotationStrategy}`, () =>
+              api('/api/settings', {
+                method: 'PUT',
+                body: JSON.stringify({ rotationStrategy, actor: 'dashboard' })
+              })
+            )
+          }
         />
 
         <AntigravityPanel
           state={state}
           busyAction={busyAction}
           onRefresh={refreshDashboard}
-          onRefreshActive={() => runMutation('ag:active', 'Antigravity quota refreshed', () => api('/api/antigravity/refresh', { method: 'POST', body: '{}' }))}
-          onRefreshAll={() => runMutation('ag:all', 'All Antigravity quotas refreshed', () => api('/api/antigravity/refresh-all', { method: 'POST', body: '{}' }))}
+          onRefreshActive={() =>
+            runMutation('ag:active', 'Antigravity quota refreshed', () =>
+              api('/api/antigravity/refresh', { method: 'POST', body: '{}' })
+            )
+          }
+          onRefreshAll={() =>
+            runMutation('ag:all', 'All Antigravity quotas refreshed', () =>
+              api('/api/antigravity/refresh-all', { method: 'POST', body: '{}' })
+            )
+          }
           onCopy={handleCopy}
         />
 
         <LogsPanel logs={logs} onRefresh={() => refreshLogs(true)} />
       </main>
 
-      <CreateAccountModal open={modalOpen} busy={busyAction === 'account:create' || Boolean(state.login)} login={state.login} lastError={state.lastLoginError} trackedEmail={trackedEmail} onClose={() => setModalOpen(false)} onSubmit={handleCreateAccount} />
-      <div className={`toast${toast ? ' is-visible' : ''}`} role="status" aria-live="polite">{toast}</div>
+      <CreateAccountModal
+        open={modalOpen}
+        busy={busyAction === 'account:create' || Boolean(state.login)}
+        login={state.login}
+        lastError={state.lastLoginError}
+        trackedEmail={trackedEmail}
+        onClose={() => setModalOpen(false)}
+        onSubmit={handleCreateAccount}
+      />
+      <div className={`toast${toast ? ' is-visible' : ''}`} role="status" aria-live="polite">
+        {toast}
+      </div>
     </div>
   )
 }
 
 const rootElement = document.getElementById('root')
 if (!rootElement) throw new Error('Dashboard root element not found')
-createRoot(rootElement).render(<StrictMode><App /></StrictMode>)
+createRoot(rootElement).render(
+  <StrictMode>
+    <App />
+  </StrictMode>
+)

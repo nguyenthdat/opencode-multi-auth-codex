@@ -85,7 +85,7 @@ export function calculateLimitsConfidence(
   const now = Date.now()
   const FRESH_THRESHOLD_MS = 5 * 60 * 1000 // 5 minutes
   const STALE_THRESHOLD_MS = 60 * 60 * 1000 // 60 minutes
-  
+
   // If we have an error more recent than last success, show error
   if (lastErrorAt && (!lastProbeAt || lastErrorAt > lastProbeAt)) {
     // If we have some successful data, show stale with error
@@ -93,14 +93,14 @@ export function calculateLimitsConfidence(
       return 'error'
     }
   }
-  
+
   // No successful probe ever
   if (!lastProbeAt) {
     return 'unknown'
   }
-  
+
   const ageMs = now - lastProbeAt
-  
+
   if (ageMs < FRESH_THRESHOLD_MS) {
     return 'fresh'
   } else if (ageMs < STALE_THRESHOLD_MS) {
@@ -185,17 +185,17 @@ export const DEFAULT_CONFIG: PluginConfig = {
 export interface RotationSettings {
   // Rotation strategy
   rotationStrategy: 'round-robin' | 'least-used' | 'random' | 'weighted-round-robin'
-  
+
   // Rate limit thresholds (0-100)
   criticalThreshold: number // Account skipped below this (default: 10)
-  lowThreshold: number      // Warning threshold (default: 30)
-  
+  lowThreshold: number // Warning threshold (default: 30)
+
   // Account weights for weighted rotation (0-1, sum should be 1)
   accountWeights: Record<string, number>
-  
+
   // Phase G: Feature flags
   featureFlags?: FeatureFlags
-  
+
   // Last updated
   updatedAt?: number
   updatedBy?: string
@@ -271,7 +271,7 @@ export interface SettingsValidationError {
 
 export function validateSettings(settings: Partial<RotationSettings>): SettingsValidationError[] {
   const errors: SettingsValidationError[] = []
-  
+
   // Validate thresholds are in 0-100 range
   if (settings.criticalThreshold !== undefined) {
     if (settings.criticalThreshold < 0 || settings.criticalThreshold > 100) {
@@ -282,7 +282,7 @@ export function validateSettings(settings: Partial<RotationSettings>): SettingsV
       })
     }
   }
-  
+
   if (settings.lowThreshold !== undefined) {
     if (settings.lowThreshold < 0 || settings.lowThreshold > 100) {
       errors.push({
@@ -292,7 +292,7 @@ export function validateSettings(settings: Partial<RotationSettings>): SettingsV
       })
     }
   }
-  
+
   // Validate critical < low
   if (settings.criticalThreshold !== undefined && settings.lowThreshold !== undefined) {
     if (settings.criticalThreshold >= settings.lowThreshold) {
@@ -303,7 +303,7 @@ export function validateSettings(settings: Partial<RotationSettings>): SettingsV
       })
     }
   }
-  
+
   // Validate weights are in (0, 1] range
   if (settings.accountWeights) {
     for (const [alias, weight] of Object.entries(settings.accountWeights)) {
@@ -315,7 +315,7 @@ export function validateSettings(settings: Partial<RotationSettings>): SettingsV
         })
       }
     }
-    
+
     // Validate weights sum to approximately 1
     const totalWeight = Object.values(settings.accountWeights).reduce((sum, w) => sum + w, 0)
     if (totalWeight > 0 && Math.abs(totalWeight - 1) > 0.01) {
@@ -326,6 +326,6 @@ export function validateSettings(settings: Partial<RotationSettings>): SettingsV
       })
     }
   }
-  
+
   return errors
 }

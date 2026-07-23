@@ -4,18 +4,35 @@
   "description": "Local OpenCode account routing, session controls, and reliability tooling for Codex OAuth",
   "type": "module",
   "packageManager": "bun@1.3.14",
-  "engines": { "bun": ">=1.3.0", "opencode": ">=1.18.4" },
+  "engines": {
+    "bun": ">=1.3.0",
+    "opencode": ">=1.18.4"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
-    "./server": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
-    "./tui": { "types": "./dist/tui.d.ts", "import": "./dist/tui.js" }
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./tui": {
+      "types": "./dist/tui.d.ts",
+      "import": "./dist/tui.js"
+    }
   },
-  "bin": { "opencode-multi-auth": "dist/cli.js" },
+  "bin": {
+    "opencode-multi-auth": "dist/cli.js"
+  },
   "scripts": {
     "build": "tsc --noEmit && tsc -p web-ui/tsconfig.json --noEmit && tsc && bun build ./web-ui/main.tsx --target browser --format esm --production --sourcemap=external --outdir ./dist/web-ui --entry-naming 'dashboard.[ext]' --asset-naming 'dashboard.[ext]'",
     "clean": "rm -rf dist",
+    "format": "prettier --write . && uvx --from ruff==0.15.20 ruff format auto-login",
+    "format:check": "prettier --check . && uvx --from ruff==0.15.20 ruff format --check auto-login",
+    "hooks:install": "git config --local core.hooksPath .git/hooks && lefthook install --force",
     "web": "bun ./dist/cli.js web --port 3434 --host 127.0.0.1",
     "test": "bun test",
     "test:unit": "bun test tests/unit",
@@ -34,11 +51,19 @@
     "solid-js": "1.9.12"
   },
   "peerDependenciesMeta": {
-    "@opencode-ai/plugin": { "optional": true },
-    "@opentui/solid": { "optional": true },
-    "solid-js": { "optional": true }
+    "@opencode-ai/plugin": {
+      "optional": true
+    },
+    "@opentui/solid": {
+      "optional": true
+    },
+    "solid-js": {
+      "optional": true
+    }
   },
-  "overrides": { "@babel/core": "7.29.7" },
+  "overrides": {
+    "@babel/core": "7.29.7"
+  },
   "devDependencies": {
     "@opencode-ai/plugin": "^1.18.4",
     "@opencode-ai/sdk": "^1.18.4",
@@ -47,6 +72,8 @@
     "@types/node": "^22.20.1",
     "@types/react": "19.2.13",
     "@types/react-dom": "19.2.3",
+    "lefthook": "2.1.10",
+    "prettier": "3.9.6",
     "react": "19.2.7",
     "react-dom": "19.2.7",
     "solid-js": "1.9.12",
@@ -59,14 +86,24 @@
     "auto-login/accounts.example.txt",
     "auto-login/requirements.txt"
   ],
-  "publishConfig": { "access": "public" },
+  "publishConfig": {
+    "access": "public"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/nguyenthdat/opencode-multi-auth-codex.git"
   },
   "homepage": "https://github.com/nguyenthdat/opencode-multi-auth-codex#readme",
-  "bugs": { "url": "https://github.com/nguyenthdat/opencode-multi-auth-codex/issues" },
-  "keywords": ["opencode", "openai", "codex", "oauth", "multi-account"],
+  "bugs": {
+    "url": "https://github.com/nguyenthdat/opencode-multi-auth-codex/issues"
+  },
+  "keywords": [
+    "opencode",
+    "openai",
+    "codex",
+    "oauth",
+    "multi-account"
+  ],
   "author": "Dat Nguyen",
   "license": "MIT"
 }

@@ -94,10 +94,18 @@ function readProbeAuthTokens(codexHome: string): ProbeAuthTokens | null {
   }
 
   const tokens = parsed?.tokens && typeof parsed.tokens === 'object' ? parsed.tokens : parsed
-  const accessToken = asString(tokens?.access_token ?? tokens?.accessToken ?? parsed?.access_token ?? parsed?.accessToken)
-  const refreshToken = asString(tokens?.refresh_token ?? tokens?.refreshToken ?? parsed?.refresh_token ?? parsed?.refreshToken)
-  const idToken = asString(tokens?.id_token ?? tokens?.idToken ?? parsed?.id_token ?? parsed?.idToken)
-  const accountIdFromToken = asString(tokens?.account_id ?? tokens?.accountId ?? parsed?.account_id ?? parsed?.accountId)
+  const accessToken = asString(
+    tokens?.access_token ?? tokens?.accessToken ?? parsed?.access_token ?? parsed?.accessToken
+  )
+  const refreshToken = asString(
+    tokens?.refresh_token ?? tokens?.refreshToken ?? parsed?.refresh_token ?? parsed?.refreshToken
+  )
+  const idToken = asString(
+    tokens?.id_token ?? tokens?.idToken ?? parsed?.id_token ?? parsed?.idToken
+  )
+  const accountIdFromToken = asString(
+    tokens?.account_id ?? tokens?.accountId ?? parsed?.account_id ?? parsed?.accountId
+  )
 
   if (!accessToken && !refreshToken) return null
 
@@ -111,16 +119,13 @@ function readProbeAuthTokens(codexHome: string): ProbeAuthTokens | null {
     asString(authAccess?.chatgpt_account_id) ||
     asString(authId?.chatgpt_account_id)
   const accountUserId =
-    asString(authAccess?.chatgpt_account_user_id) ||
-    asString(authId?.chatgpt_account_user_id)
+    asString(authAccess?.chatgpt_account_user_id) || asString(authId?.chatgpt_account_user_id)
   const userId =
     asString(authAccess?.user_id) ||
     asString(authAccess?.chatgpt_user_id) ||
     asString(authId?.user_id) ||
     asString(authId?.chatgpt_user_id)
-  const planType =
-    asString(authAccess?.chatgpt_plan_type) ||
-    asString(authId?.chatgpt_plan_type)
+  const planType = asString(authAccess?.chatgpt_plan_type) || asString(authId?.chatgpt_plan_type)
   const email = getEmailFromClaims(idClaims) || getEmailFromClaims(accessClaims)
 
   const exp = accessClaims?.exp ?? idClaims?.exp
@@ -147,11 +152,9 @@ function syncAccountTokensFromProbeHome(alias: string, codexHome: string): void 
   const current = loadStore().accounts[alias]
   const tokenChanged = Boolean(
     current &&
-    (
-      current.accessToken !== parsed.accessToken ||
+    (current.accessToken !== parsed.accessToken ||
       current.refreshToken !== parsed.refreshToken ||
-      (parsed.idToken && current.idToken !== parsed.idToken)
-    )
+      (parsed.idToken && current.idToken !== parsed.idToken))
   )
 
   const updates: Partial<AccountCredentials> = {
@@ -260,14 +263,7 @@ async function runCodexExec(
   effort?: string
 ): Promise<{ ok: boolean; error?: string; durationMs?: number }> {
   return new Promise((resolve) => {
-    const args = [
-      'exec',
-      '--skip-git-repo-check',
-      '--cd',
-      codexHome,
-      '--sandbox',
-      'read-only'
-    ]
+    const args = ['exec', '--skip-git-repo-check', '--cd', codexHome, '--sandbox', 'read-only']
     if (model) {
       args.push('-m', model)
     }
@@ -336,7 +332,7 @@ export async function probeRateLimitsForAccount(account: AccountCredentials): Pr
   for (let idx = 0; idx < probeModels.length; idx++) {
     const probeModel = probeModels[idx]
     const startedAt = Date.now()
-    
+
     // Phase C: Pass effort config and track duration
     const execResult = await runCodexExec(codexHome, probeModel, probeEffort)
     syncAccountTokensFromProbeHome(account.alias, codexHome)
@@ -365,7 +361,7 @@ export async function probeRateLimitsForAccount(account: AccountCredentials): Pr
 
     const hasNext = idx < probeModels.length - 1
     if (!hasNext) break
-    
+
     // Phase C: Retry with fallback on unsupported_value / reasoning.effort errors
     if (shouldRetryWithFallback(execResult.error)) {
       // Try with 'low' effort explicitly if current effort failed
@@ -376,7 +372,7 @@ export async function probeRateLimitsForAccount(account: AccountCredentials): Pr
           sessionsDir,
           sinceMs: Date.now() - 5_000
         })
-        
+
         if (lowEffortResult.ok && lowEffortLatest?.rateLimits) {
           return {
             rateLimits: lowEffortLatest.rateLimits,
@@ -388,26 +384,26 @@ export async function probeRateLimitsForAccount(account: AccountCredentials): Pr
             isAuthoritative: true
           }
         }
-        
+
         if (lowEffortResult.error) {
           attemptErrors.push(`[model=${probeModel}, effort=low] ${lowEffortResult.error}`)
         }
       }
       continue
     }
-    
+
     // Don't retry if it's not a fallback-eligible error
     break
   }
 
   if (attemptErrors.length > 0) {
-    return { 
+    return {
       error: attemptErrors[attemptErrors.length - 1],
       isAuthoritative: false
     }
   }
 
-  return { 
+  return {
     error: lastError,
     isAuthoritative: false
   }

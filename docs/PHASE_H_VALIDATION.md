@@ -21,14 +21,14 @@ The OpenCode Multi-Auth Codex project has passed comprehensive validation and is
 
 ### Validation Metrics
 
-| Metric | Target | Achieved | Status |
-|--------|--------|----------|--------|
-| Build | 0 errors | 0 errors | ✅ |
-| Lint | 0 errors | 0 errors | ✅ |
-| Test Suite | 5 consecutive passes | 5/5 passes | ✅ |
-| Test Coverage | 100+ tests | 116 tests | ✅ |
-| Contract Compliance | All contracts | All verified | ✅ |
-| Cross-Phase Integration | All phases | All integrated | ✅ |
+| Metric                  | Target               | Achieved       | Status |
+| ----------------------- | -------------------- | -------------- | ------ |
+| Build                   | 0 errors             | 0 errors       | ✅     |
+| Lint                    | 0 errors             | 0 errors       | ✅     |
+| Test Suite              | 5 consecutive passes | 5/5 passes     | ✅     |
+| Test Coverage           | 100+ tests           | 116 tests      | ✅     |
+| Contract Compliance     | All contracts        | All verified   | ✅     |
+| Cross-Phase Integration | All phases           | All integrated | ✅     |
 
 ---
 
@@ -42,6 +42,7 @@ Lint:   PASS (TypeScript strict mode: 0 errors)
 ```
 
 **Files Generated:**
+
 - dist/*.js - Compiled JavaScript
 - dist/*.d.ts - Type definitions
 - dist/*.map - Source maps
@@ -52,15 +53,16 @@ Lint:   PASS (TypeScript strict mode: 0 errors)
 
 All 5 runs executed successfully with **100% pass rate**:
 
-| Run | Test Suites | Tests | Status |
-|-----|-------------|-------|--------|
-| 1 | 7/7 | 116/116 | ✅ |
-| 2 | 7/7 | 116/116 | ✅ |
-| 3 | 7/7 | 116/116 | ✅ |
-| 4 | 7/7 | 116/116 | ✅ |
-| 5 | 7/7 | 116/116 | ✅ |
+| Run | Test Suites | Tests   | Status |
+| --- | ----------- | ------- | ------ |
+| 1   | 7/7         | 116/116 | ✅     |
+| 2   | 7/7         | 116/116 | ✅     |
+| 3   | 7/7         | 116/116 | ✅     |
+| 4   | 7/7         | 116/116 | ✅     |
+| 5   | 7/7         | 116/116 | ✅     |
 
 **Test Breakdown:**
+
 - Phase B (Reliability): 23 tests ✅
 - Phase C (Limits): 26 tests ✅
 - Phase D (Accounts): 20 tests ✅
@@ -76,14 +78,14 @@ All 5 runs executed successfully with **100% pass rate**:
 
 All phase integrations verified:
 
-| Integration | Status | Evidence |
-|-------------|--------|----------|
-| Phase A→B (Migration) | ✅ | v1→v2 migration active |
-| Phase B→C (Retries+Limits) | ✅ | Bounded retries with probe authority |
-| Phase C→D (Limits+Enabled) | ✅ | Confidence state respected |
-| Phase D→E (Enabled+Force) | ✅ | Disabled accounts excluded from force |
-| Phase E→F (Force+Weighted) | ✅ | Force takes precedence over weighted |
-| Phase F→G (Settings+Flags) | ✅ | Feature flags in settings model |
+| Integration                | Status | Evidence                              |
+| -------------------------- | ------ | ------------------------------------- |
+| Phase A→B (Migration)      | ✅     | v1→v2 migration active                |
+| Phase B→C (Retries+Limits) | ✅     | Bounded retries with probe authority  |
+| Phase C→D (Limits+Enabled) | ✅     | Confidence state respected            |
+| Phase D→E (Enabled+Force)  | ✅     | Disabled accounts excluded from force |
+| Phase E→F (Force+Weighted) | ✅     | Force takes precedence over weighted  |
+| Phase F→G (Settings+Flags) | ✅     | Feature flags in settings model       |
 
 ---
 
@@ -92,6 +94,7 @@ All phase integrations verified:
 All implementation contracts validated:
 
 #### Store Contract (Section 4.1) ✅
+
 - ✅ v1→v2 automatic migration
 - ✅ Atomic write operations (tmp→fsync→rename)
 - ✅ Version field persisted
@@ -99,6 +102,7 @@ All implementation contracts validated:
 - ✅ Last-known-good snapshots
 
 #### API Contract (Section 4.2) ✅
+
 - ✅ `GET /api/accounts` - List with metadata
 - ✅ `PUT /api/accounts/:alias/enabled` - Toggle enabled state
 - ✅ `POST /api/accounts/:alias/reauth` - Re-authenticate
@@ -109,6 +113,7 @@ All implementation contracts validated:
 - ✅ `GET/POST /api/force/*` - Force mode APIs
 
 #### Limits Data Quality Contract (Section 4.3) ✅
+
 - ✅ `isAuthoritative` flag on probe results
 - ✅ Failed probes never overwrite prior limits
 - ✅ Freshness states (fresh/stale/error/unknown)
@@ -116,6 +121,7 @@ All implementation contracts validated:
 - ✅ Probe source diagnostics
 
 #### Observability Contract (Section 4.4) ✅
+
 - ✅ Decision logging with rotation details
 - ✅ Force state included in logs
 - ✅ Settings audit trail (updatedBy, updatedAt)
@@ -126,11 +132,13 @@ All implementation contracts validated:
 ## Phase-by-Phase Validation
 
 ### Phase A: Repository Bootstrap ✅
+
 - **Status:** COMPLETE
 - **Tests:** Baseline captured
 - **Production Ready:** YES
 
 ### Phase B: Core Runtime Reliability ✅
+
 - **Status:** COMPLETE
 - **Tests:** 23/23 PASS
 - **Production Ready:** YES
@@ -143,6 +151,7 @@ All implementation contracts validated:
   - Health hysteresis
 
 ### Phase C: Limits Accuracy ✅
+
 - **Status:** COMPLETE
 - **Tests:** 26/26 PASS
 - **Production Ready:** YES
@@ -154,6 +163,7 @@ All implementation contracts validated:
   - UI accuracy improvements
 
 ### Phase D: Account Lifecycle ✅
+
 - **Status:** COMPLETE
 - **Tests:** 20/20 PASS
 - **Production Ready:** YES
@@ -165,6 +175,7 @@ All implementation contracts validated:
   - Dashboard UI controls
 
 ### Phase E: Force Mode ✅
+
 - **Status:** COMPLETE
 - **Tests:** 10/10 PASS
 - **Production Ready:** YES
@@ -175,6 +186,7 @@ All implementation contracts validated:
   - Previous strategy restoration
 
 ### Phase F: Settings + Weighted Rotation ✅
+
 - **Status:** COMPLETE
 - **Tests:** 23/23 PASS
 - **Production Ready:** YES
@@ -186,6 +198,7 @@ All implementation contracts validated:
   - Presets (balanced/conservative/aggressive)
 
 ### Phase G: Non-Core Isolation ✅
+
 - **Status:** COMPLETE
 - **Tests:** 14/14 PASS
 - **Production Ready:** YES
@@ -199,56 +212,61 @@ All implementation contracts validated:
 
 ## Security Audit ✅
 
-| Requirement | Status | Evidence |
-|-------------|--------|----------|
-| No secrets in code | ✅ | No hardcoded credentials |
-| Token redaction | ✅ | Errors don't expose tokens |
-| Localhost-only | ✅ | Pattern validation enforced |
-| Safe permissions | ✅ | 0o600 on sensitive files |
-| Input validation | ✅ | All APIs validate input |
-| Deterministic errors | ✅ | Typed error codes |
+| Requirement          | Status | Evidence                    |
+| -------------------- | ------ | --------------------------- |
+| No secrets in code   | ✅     | No hardcoded credentials    |
+| Token redaction      | ✅     | Errors don't expose tokens  |
+| Localhost-only       | ✅     | Pattern validation enforced |
+| Safe permissions     | ✅     | 0o600 on sensitive files    |
+| Input validation     | ✅     | All APIs validate input     |
+| Deterministic errors | ✅     | Typed error codes           |
 
 ---
 
 ## Performance Validation ✅
 
-| Metric | Target | Achieved | Status |
-|--------|--------|----------|--------|
-| Build time | < 30s | ~5s | ✅ |
-| Test execution | < 60s | ~1.3s | ✅ |
-| Store write | < 100ms | ~5ms | ✅ |
-| Memory usage | < 100MB | ~30MB | ✅ |
-| Rotation decision | < 10ms | ~2ms | ✅ |
+| Metric            | Target  | Achieved | Status |
+| ----------------- | ------- | -------- | ------ |
+| Build time        | < 30s   | ~5s      | ✅     |
+| Test execution    | < 60s   | ~1.3s    | ✅     |
+| Store write       | < 100ms | ~5ms     | ✅     |
+| Memory usage      | < 100MB | ~30MB    | ✅     |
+| Rotation decision | < 10ms  | ~2ms     | ✅     |
 
 ---
 
 ## E2E Flow Verification ✅
 
 ### Flow 1: Account Lifecycle
+
 1. Add account ✅
 2. Enable/disable via API ✅
 3. Rotation respects enabled state ✅
 4. Re-auth via OAuth ✅
 
 ### Flow 2: Limits Refresh
+
 1. Probe execution ✅
 2. Authority validation ✅
 3. Failed probe handling ✅
 4. Freshness state update ✅
 
 ### Flow 3: Force Mode
+
 1. Activate force ✅
 2. Force selection in rotation ✅
 3. Auto-clear on expiry ✅
 4. Strategy restoration ✅
 
 ### Flow 4: Settings Management
+
 1. Get default settings ✅
 2. Update with validation ✅
 3. Apply preset ✅
 4. Weighted rotation selection ✅
 
 ### Flow 5: Feature Flags
+
 1. Check feature enabled ✅
 2. API gated ✅
 3. UI hidden when disabled ✅
@@ -264,6 +282,7 @@ None. All requirements implemented and tested.
 ## Production Deployment Readiness
 
 ### ✅ Pre-Deployment Checklist
+
 - [x] Code review complete
 - [x] All tests passing (116/116)
 - [x] 5 consecutive test runs passed
@@ -275,6 +294,7 @@ None. All requirements implemented and tested.
 - [x] E2E flows verified
 
 ### Deployment Steps
+
 1. ✅ Build artifacts ready
 2. ✅ Configure environment variables
 3. ✅ Set up auth files
@@ -282,6 +302,7 @@ None. All requirements implemented and tested.
 5. ✅ Verify health
 
 ### Post-Deployment Verification
+
 - [ ] Dashboard accessible
 - [ ] Accounts sync correctly
 - [ ] Rotation working
@@ -294,9 +315,11 @@ None. All requirements implemented and tested.
 ## Environment Variables
 
 ### Required
+
 None - sensible defaults provided
 
 ### Optional
+
 ```bash
 # Store configuration
 OPENCODE_MULTI_AUTH_STORE_DIR=/path/to/store
@@ -354,6 +377,7 @@ OPENCODE_MULTI_AUTH_ANTIGRAVITY_ENABLED=false
 ## Appendix: Test Suite Details
 
 ### Test Files
+
 - `tests/unit/store.test.ts` - Store operations
 - `tests/unit/errors.test.ts` - Error handling
 - `tests/unit/localhost.test.ts` - Security
@@ -363,12 +387,14 @@ OPENCODE_MULTI_AUTH_ANTIGRAVITY_ENABLED=false
 - `tests/unit/feature-flags.test.ts` - Feature gating
 
 ### Test Categories
+
 - **Unit Tests:** 116 tests
 - **Integration Tests:** Covered via unit tests
 - **E2E Tests:** Manual verification performed
 - **Contract Tests:** All contracts verified
 
 ### Coverage Summary
+
 - Core runtime: 100%
 - Store operations: 100%
 - Limits accuracy: 100%

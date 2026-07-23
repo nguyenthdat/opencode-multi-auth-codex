@@ -17,7 +17,8 @@ function resolveSettings(includeEnvOverrides) {
     // Layer 2: Environment variables override (optional for runtime behavior)
     if (includeEnvOverrides) {
         const envStrategy = process.env.OPENCODE_MULTI_AUTH_ROTATION_STRATEGY;
-        if (envStrategy && ['round-robin', 'least-used', 'random', 'weighted-round-robin'].includes(envStrategy)) {
+        if (envStrategy &&
+            ['round-robin', 'least-used', 'random', 'weighted-round-robin'].includes(envStrategy)) {
             settings.rotationStrategy = envStrategy;
             source = 'env';
         }
@@ -51,7 +52,7 @@ function resolveSettings(includeEnvOverrides) {
     // Validate final settings
     const errors = validateSettings(settings);
     if (errors.length > 0) {
-        logError(`Settings validation errors: ${errors.map(e => e.message).join(', ')}`);
+        logError(`Settings validation errors: ${errors.map((e) => e.message).join(', ')}`);
     }
     return { settings, source, errors: errors.length > 0 ? errors : undefined };
 }
@@ -76,7 +77,7 @@ export function updateSettings(updates, actor = 'system') {
     // Validate new settings
     const errors = validateSettings(newSettings);
     if (errors.length > 0) {
-        logError(`Settings update failed validation: ${errors.map(e => e.message).join(', ')}`);
+        logError(`Settings update failed validation: ${errors.map((e) => e.message).join(', ')}`);
         return { success: false, errors };
     }
     // Save to store
@@ -106,13 +107,13 @@ export function applyPreset(preset, actor = 'system') {
     if (preset === 'balanced') {
         // Equal weights for all accounts
         const weight = accounts.length > 0 ? 1 / accounts.length : 0;
-        accounts.forEach(alias => {
+        accounts.forEach((alias) => {
             accountWeights[alias] = weight;
         });
     }
     else if (preset === 'conservative') {
         // Weights based on limit health
-        accounts.forEach(alias => {
+        accounts.forEach((alias) => {
             const account = store.accounts[alias];
             const fiveHourRemaining = account.rateLimits?.fiveHour?.remaining ?? 50;
             const weeklyRemaining = account.rateLimits?.weekly?.remaining ?? 50;
@@ -122,14 +123,14 @@ export function applyPreset(preset, actor = 'system') {
         // Normalize to sum to 1
         const total = Object.values(accountWeights).reduce((sum, w) => sum + w, 0);
         if (total > 0) {
-            accounts.forEach(alias => {
+            accounts.forEach((alias) => {
                 accountWeights[alias] = accountWeights[alias] / total;
             });
         }
     }
     else if (preset === 'aggressive') {
         // Favor accounts with high usage (lower remaining)
-        accounts.forEach(alias => {
+        accounts.forEach((alias) => {
             const account = store.accounts[alias];
             const fiveHourRemaining = account.rateLimits?.fiveHour?.remaining ?? 50;
             const weeklyRemaining = account.rateLimits?.weekly?.remaining ?? 50;
@@ -140,7 +141,7 @@ export function applyPreset(preset, actor = 'system') {
         // Normalize to sum to 1
         const total = Object.values(accountWeights).reduce((sum, w) => sum + w, 0);
         if (total > 0) {
-            accounts.forEach(alias => {
+            accounts.forEach((alias) => {
                 accountWeights[alias] = accountWeights[alias] / total;
             });
         }
@@ -158,7 +159,7 @@ export function calculateWeightedSelection(aliases, weights) {
     if (aliases.length === 0)
         return null;
     // Filter to only available aliases
-    const available = aliases.filter(alias => weights[alias] > 0);
+    const available = aliases.filter((alias) => weights[alias] > 0);
     if (available.length === 0)
         return null;
     // Calculate total weight

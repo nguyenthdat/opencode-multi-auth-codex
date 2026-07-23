@@ -7,9 +7,9 @@ defined by `SANDBOX_QUICK_REF.md`.
 ## 1. Preflight
 
 - [ ] Record package version, commit SHA, Bun version, OpenCode version, OS, and
-  browser version.
+      browser version.
 - [ ] Back up current `~/.config/opencode`, `~/.config/opencode-multi-auth`, and
-  `~/.codex` state.
+      `~/.codex` state.
 - [ ] Build current backend and React assets before tests:
 
 ```bash
@@ -22,10 +22,10 @@ npm pack --dry-run
 ```
 
 - [ ] Confirm the package manifest includes `dist/web-ui/dashboard.js` and
-  `dist/web-ui/dashboard.css`.
+      `dist/web-ui/dashboard.css`.
 - [ ] Treat `test:web:headless` as HTTP/asset smoke, not browser E2E.
 - [ ] Treat `test:soak:48h` as the short soak scaffold, not a completed 48-hour
-  run.
+      run.
 
 ## 2. Start the Dashboard
 
@@ -37,7 +37,7 @@ bun dist/cli.js web --host 127.0.0.1 --port 3434
 - [ ] Confirm React replaces the loading state.
 - [ ] Confirm the browser console has no runtime errors.
 - [ ] Confirm network requests for `/dashboard.js`, `/dashboard.css`,
-  `/api/state`, and `/api/logs` succeed.
+      `/api/state`, and `/api/logs` succeed.
 - [ ] Confirm state and static assets from the shell:
 
 ```bash
@@ -71,19 +71,19 @@ curl -i -X POST http://127.0.0.1:3434/api/switch \
 ```
 
 - [ ] HTML response CSP contains self-only script/connect/font rules and blocks
-  framing.
+      framing.
 
 ## 4. React Dashboard Behavior
 
 - [ ] Overview shows account count, active alias, recommendation, store status,
-  sync state, and auto-login status.
+      sync state, and auto-login status.
 - [ ] Search matches alias, email, tags, and notes.
 - [ ] Tag filter and all sort modes update the visible account list.
 - [ ] Empty store and no-filter-match messages are distinct.
 - [ ] Quota cards show correct confidence, progress, reset/update time, and
-  history sparkline state.
+      history sparkline state.
 - [ ] Connection failure remains visible after an initially successful load and
-  Retry recovers.
+      Retry recovers.
 - [ ] Desktop and 390 px mobile layouts have no horizontal overflow.
 
 ## 5. Account Lifecycle
@@ -122,8 +122,8 @@ curl -fsS http://127.0.0.1:3434/api/accounts
 - [ ] Clear force and confirm the strategy captured before force becomes active.
 - [ ] Confirm the rotation strategy selector persists changes.
 - [ ] Exercise full threshold, weight, and preset behavior through the API; the
-  React dashboard currently exposes strategy selection, not the full settings
-  editor.
+      React dashboard currently exposes strategy selection, not the full settings
+      editor.
 
 ```bash
 curl -fsS http://127.0.0.1:3434/api/force
@@ -137,16 +137,16 @@ curl -fsS http://127.0.0.1:3434/api/settings
 - [ ] Fresh/stale/error/unknown states reflect authoritative data.
 - [ ] Failed probes preserve prior quota values.
 - [ ] With Antigravity disabled, refresh endpoints return
-  `403 FEATURE_DISABLED`.
+      `403 FEATURE_DISABLED`.
 - [ ] Enable the feature only when intentionally testing those local files and
-  provider requests.
+      provider requests.
 
 ## 9. Live OpenCode Flow
 
 - [ ] Restart OpenCode with the current package reference.
 - [ ] Open `/codex` and verify the same account state shown by the dashboard.
 - [ ] Send representative requests and confirm rotation, disabled state, force,
-  cooldown, and model selection behavior.
+      cooldown, and model selection behavior.
 - [ ] Monitor redacted logs:
 
 ```bash

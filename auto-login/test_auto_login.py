@@ -49,9 +49,7 @@ class PipeCredentialsTests(unittest.TestCase):
         ]
         with patch("builtins.print"):
             unique = auto_login.deduplicate_accounts(accounts)
-        self.assertEqual(
-            [account["password"] for account in unique], ["first", "third"]
-        )
+        self.assertEqual([account["password"] for account in unique], ["first", "third"])
 
 
 class EnvironmentTests(unittest.TestCase):
@@ -98,20 +96,14 @@ class StoreTests(unittest.TestCase):
                 patch.object(auto_login, "LEGACY_STORE_FILE", legacy_file),
                 patch.object(auto_login, "decode_jwt_payload", side_effect=claims),
             ):
-                email, alias, is_new = auto_login.add_account_to_store(
-                    tokens, "Team Primary"
-                )
+                email, alias, is_new = auto_login.add_account_to_store(tokens, "Team Primary")
 
             saved = json.loads(store_file.read_text(encoding="utf-8"))
-            self.assertEqual(
-                (email, alias, is_new), ("New.User@example.com", "team-primary", True)
-            )
+            self.assertEqual((email, alias, is_new), ("New.User@example.com", "team-primary", True))
             self.assertEqual(saved["version"], 2)
             self.assertEqual(saved["activeAlias"], "team-primary")
             self.assertIsInstance(saved["accounts"], dict)
-            self.assertEqual(
-                saved["accounts"]["team-primary"]["refreshToken"], "refresh-one"
-            )
+            self.assertEqual(saved["accounts"]["team-primary"]["refreshToken"], "refresh-one")
 
             saved["accounts"]["team-primary"].update(
                 {
@@ -133,9 +125,7 @@ class StoreTests(unittest.TestCase):
                     updated_tokens, "ignored-new-alias"
                 )
 
-            skipped = json.loads(store_file.read_text(encoding="utf-8"))["accounts"][
-                "team-primary"
-            ]
+            skipped = json.loads(store_file.read_text(encoding="utf-8"))["accounts"]["team-primary"]
             self.assertEqual((skipped_alias, skipped_is_new), ("team-primary", False))
             self.assertEqual(skipped["accessToken"], "access-one")
 
@@ -148,9 +138,7 @@ class StoreTests(unittest.TestCase):
                     updated_tokens, "ignored-new-alias", force=True
                 )
 
-            updated = json.loads(store_file.read_text(encoding="utf-8"))["accounts"][
-                "team-primary"
-            ]
+            updated = json.loads(store_file.read_text(encoding="utf-8"))["accounts"]["team-primary"]
             self.assertEqual((updated_alias, updated_is_new), ("team-primary", False))
             self.assertEqual(updated["accessToken"], "access-two")
             self.assertEqual(updated["usageCount"], 7)
@@ -231,9 +219,7 @@ class StoreTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "store is encrypted"):
                     auto_login.load_store()
 
-            self.assertEqual(
-                json.loads(store_file.read_text(encoding="utf-8")), encrypted
-            )
+            self.assertEqual(json.loads(store_file.read_text(encoding="utf-8")), encrypted)
 
 
 class CommandLoginTests(unittest.TestCase):
@@ -269,9 +255,7 @@ class CommandLoginTests(unittest.TestCase):
 
         with (
             patch.object(auto_login, "load_store") as load_store,
-            patch.object(
-                auto_login, "login_account", return_value=account["email"]
-            ) as login,
+            patch.object(auto_login, "login_account", return_value=account["email"]) as login,
             patch("builtins.print"),
         ):
             result = auto_login.cmd_login([account], {}, force=True)
@@ -288,9 +272,7 @@ class CommandLoginTests(unittest.TestCase):
 
         with (
             patch.object(auto_login, "load_store") as load_store,
-            patch.object(
-                auto_login, "login_account", return_value=account["email"]
-            ) as login,
+            patch.object(auto_login, "login_account", return_value=account["email"]) as login,
             patch("builtins.print"),
         ):
             result = auto_login.cmd_login(
@@ -324,9 +306,7 @@ class BrowserElementTests(unittest.TestCase):
 
 class TotpTests(unittest.TestCase):
     def test_matches_rfc_6238_sha1_vector(self):
-        secret = (
-            "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"  # gitleaks:allow - RFC 6238 test vector
-        )
+        secret = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"  # gitleaks:allow - RFC 6238 test vector
         self.assertEqual(auto_login.generate_totp(secret, timestamp=59), "287082")
 
     def test_accepts_grouped_base32_secret(self):
@@ -344,20 +324,14 @@ class TotpTests(unittest.TestCase):
             patch.object(auto_login, "_is_totp_challenge", return_value=True),
             patch.object(auto_login, "_fill_verification_code"),
             patch.object(auto_login, "_submit_verification_form"),
-            patch.object(
-                auto_login.time, "time", side_effect=[100, 100, 100, 121, 121]
-            ),
+            patch.object(auto_login.time, "time", side_effect=[100, 100, 100, 121, 121]),
             patch("builtins.print"),
         ):
             self.assertFalse(
-                auto_login.handle_totp_challenge(
-                    FakePage(), "JBSWY3DPEHPK3PXP", attempted
-                )
+                auto_login.handle_totp_challenge(FakePage(), "JBSWY3DPEHPK3PXP", attempted)
             )
             self.assertFalse(
-                auto_login.handle_totp_challenge(
-                    FakePage(), "JBSWY3DPEHPK3PXP", attempted
-                )
+                auto_login.handle_totp_challenge(FakePage(), "JBSWY3DPEHPK3PXP", attempted)
             )
 
         self.assertEqual(attempted, {3, 4})
@@ -389,9 +363,7 @@ class SmsPoolTests(unittest.TestCase):
 
     def test_normalizes_purchase_number(self):
         self.assertEqual(
-            auto_login._normalize_smspool_phone(
-                {"cc": "1", "phonenumber": "234567890"}
-            ),
+            auto_login._normalize_smspool_phone({"cc": "1", "phonenumber": "234567890"}),
             "+1234567890",
         )
 
@@ -402,9 +374,7 @@ class SmsPoolTests(unittest.TestCase):
             "order_id": "ABCDEFGH",
             "expires_in": 1200,
         }
-        with patch.object(
-            auto_login, "smspool_api_request", return_value=response
-        ) as request:
+        with patch.object(auto_login, "smspool_api_request", return_value=response) as request:
             order = auto_login.purchase_smspool_number("api-key")
 
         self.assertEqual(order["order_id"], "ABCDEFGH")
@@ -444,9 +414,7 @@ class SmsPoolTests(unittest.TestCase):
             {"success": 1},
         ]
         with (
-            patch.object(
-                auto_login, "smspool_api_request", side_effect=responses
-            ) as request,
+            patch.object(auto_login, "smspool_api_request", side_effect=responses) as request,
             patch.object(auto_login.time, "sleep"),
         ):
             self.assertTrue(auto_login.cancel_smspool_order("ABCDEFGH", "api-key"))
@@ -479,9 +447,7 @@ class SmsPoolTests(unittest.TestCase):
                 "wait_for_smspool_sms",
                 side_effect=TimeoutError("timed out"),
             ) as wait_for_sms,
-            patch.object(
-                auto_login, "cancel_smspool_order", return_value=True
-            ) as cancel,
+            patch.object(auto_login, "cancel_smspool_order", return_value=True) as cancel,
         ):
             with self.assertRaises(auto_login.SmsPoolRetryRequired):
                 auto_login.handle_smspool_phone_challenge(
@@ -543,9 +509,7 @@ class SmsPoolTests(unittest.TestCase):
                 "purchase_smspool_number",
                 return_value={"order_id": "ORDER001", "phone": "+15550000001"},
             ),
-            patch.object(
-                auto_login, "cancel_smspool_order", return_value=True
-            ) as cancel,
+            patch.object(auto_login, "cancel_smspool_order", return_value=True) as cancel,
             patch.object(auto_login, "wait_for_smspool_sms") as wait_for_sms,
             patch.object(auto_login, "_save_debug_screenshot_page"),
         ):
@@ -566,12 +530,8 @@ class SmsPoolTests(unittest.TestCase):
                 "purchase_smspool_number",
                 return_value={"order_id": "ORDER001", "phone": "+15550000001"},
             ),
-            patch.object(
-                auto_login, "_human_type", side_effect=RuntimeError("detached")
-            ),
-            patch.object(
-                auto_login, "cancel_smspool_order", return_value=True
-            ) as cancel,
+            patch.object(auto_login, "_human_type", side_effect=RuntimeError("detached")),
+            patch.object(auto_login, "cancel_smspool_order", return_value=True) as cancel,
         ):
             with self.assertRaisesRegex(RuntimeError, "detached"):
                 auto_login.handle_smspool_phone_challenge(object())

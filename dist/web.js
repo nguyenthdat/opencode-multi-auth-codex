@@ -350,7 +350,7 @@ function findAutoLoginAccount(config, selector) {
     const normalized = selector.trim().toLowerCase();
     if (!normalized)
         return null;
-    return config.accounts.find((account) => account.email.toLowerCase() === normalized || account.alias.toLowerCase() === normalized) || null;
+    return (config.accounts.find((account) => account.email.toLowerCase() === normalized || account.alias.toLowerCase() === normalized) || null);
 }
 function findStoreAccountByEmail(store, email) {
     const normalized = email.trim().toLowerCase();
@@ -383,9 +383,7 @@ function updatePendingLogin(patch) {
     };
 }
 function appendPendingLoginOutput(line) {
-    const normalized = line
-        .replace(/\x1b\[[0-9;]*m/g, '')
-        .trim();
+    const normalized = line.replace(/\x1b\[[0-9;]*m/g, '').trim();
     if (!normalized || !pendingLogin)
         return;
     const output = [...pendingLogin.output, normalized].slice(-6);
@@ -592,7 +590,11 @@ function runSync() {
     }
 }
 function loadAntigravityAccounts() {
-    const result = { path: ANTIGRAVITY_ACCOUNTS_FILE, accounts: [], readAt: Date.now() };
+    const result = {
+        path: ANTIGRAVITY_ACCOUNTS_FILE,
+        accounts: [],
+        readAt: Date.now()
+    };
     if (!fs.existsSync(ANTIGRAVITY_ACCOUNTS_FILE)) {
         return { ...result, error: 'antigravity-accounts.json not found' };
     }
@@ -718,7 +720,9 @@ function antigravityRequest(port, csrfToken, pathName, body) {
             timeout: 5000
         }, (res) => {
             let data = '';
-            res.on('data', (chunk) => { data += chunk; });
+            res.on('data', (chunk) => {
+                data += chunk;
+            });
             res.on('end', () => {
                 try {
                     resolve(JSON.parse(data));
@@ -769,8 +773,16 @@ function formatAntigravityDuration(ms, resetTime) {
     if (!resetTime)
         return duration;
     const resetDate = new Date(resetTime);
-    const dateStr = resetDate.toLocaleDateString(undefined, { day: '2-digit', month: '2-digit', year: 'numeric' });
-    const timeStr = resetDate.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false });
+    const dateStr = resetDate.toLocaleDateString(undefined, {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+    });
+    const timeStr = resetDate.toLocaleTimeString(undefined, {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+    });
     return `${duration} (${dateStr} ${timeStr})`;
 }
 function updateAntigravityActiveIndex(raw, index) {
@@ -867,9 +879,7 @@ function parseAntigravityQuota(data) {
         const remainingFraction = typeof model.quotaInfo?.remainingFraction === 'number'
             ? model.quotaInfo.remainingFraction
             : undefined;
-        const remainingPercentage = typeof remainingFraction === 'number'
-            ? remainingFraction * 100
-            : undefined;
+        const remainingPercentage = typeof remainingFraction === 'number' ? remainingFraction * 100 : undefined;
         const diff = resetTime ? resetTime - Date.now() : undefined;
         const label = model.label || model.modelOrAlias?.model || 'model';
         const modelId = model.modelOrAlias?.model || model.modelOrAlias?.alias || 'unknown';
@@ -962,7 +972,8 @@ export function startWebConsole(options) {
         const requestUrl = new URL(req.url || '/', `http://${host}:${port}`);
         const path = requestUrl.pathname;
         try {
-            if (!isAllowedWebAuthority(req.headers.host, port) || !isAllowedWebOrigin(req.headers.origin, port)) {
+            if (!isAllowedWebAuthority(req.headers.host, port) ||
+                !isAllowedWebOrigin(req.headers.origin, port)) {
                 sendJson(res, 403, { error: 'Forbidden request origin', code: 'FORBIDDEN_ORIGIN' });
                 return;
             }
@@ -998,7 +1009,9 @@ export function startWebConsole(options) {
                 const settings = getSettings();
                 const runtimeSettings = getRuntimeSettings();
                 const antigravityEnabled = settings.settings.featureFlags?.antigravityEnabled ?? false;
-                const antigravity = antigravityEnabled ? loadAntigravityAccounts() : { accounts: [], path: ANTIGRAVITY_ACCOUNTS_FILE };
+                const antigravity = antigravityEnabled
+                    ? loadAntigravityAccounts()
+                    : { accounts: [], path: ANTIGRAVITY_ACCOUNTS_FILE };
                 const forceState = getForceState();
                 const forceActive = isForceActive();
                 const autoLogin = loadAutoLoginConfig();
@@ -1015,7 +1028,13 @@ export function startWebConsole(options) {
                     login: pendingLogin,
                     lastLoginError,
                     // Phase G: Only include antigravity data if feature is enabled
-                    antigravity: antigravityEnabled ? { ...antigravity, quota: antigravityQuotaState } : { accounts: [], path: ANTIGRAVITY_ACCOUNTS_FILE, quota: { status: 'disabled', scope: 'active' } },
+                    antigravity: antigravityEnabled
+                        ? { ...antigravity, quota: antigravityQuotaState }
+                        : {
+                            accounts: [],
+                            path: ANTIGRAVITY_ACCOUNTS_FILE,
+                            quota: { status: 'disabled', scope: 'active' }
+                        },
                     queue: getRefreshQueueState(),
                     recommendedAlias: recommendAlias(rawAccounts),
                     logPath: getLogPath(),
@@ -1189,7 +1208,11 @@ export function startWebConsole(options) {
                             writeCodexAuthForAlias(account.alias);
                         }
                         catch (err) {
-                            results.push({ alias: account.alias, updated: true, error: `Refreshed, but failed to update auth.json: ${err}` });
+                            results.push({
+                                alias: account.alias,
+                                updated: true,
+                                error: `Refreshed, but failed to update auth.json: ${err}`
+                            });
                             continue;
                         }
                     }
@@ -1247,7 +1270,7 @@ export function startWebConsole(options) {
             // GET /api/accounts - List all accounts with metadata
             if (req.method === 'GET' && path === '/api/accounts') {
                 const store = loadStore();
-                const accounts = Object.values(store.accounts).map(acc => ({
+                const accounts = Object.values(store.accounts).map((acc) => ({
                     alias: acc.alias,
                     email: acc.email,
                     enabled: acc.enabled !== false, // Defaults to true
@@ -1288,7 +1311,7 @@ export function startWebConsole(options) {
                 const enabled = body.enabled === true;
                 // Phase D: Prevent disabling the last enabled account
                 if (!enabled) {
-                    const enabledCount = Object.values(store.accounts).filter(acc => acc.alias !== alias && acc.enabled !== false).length;
+                    const enabledCount = Object.values(store.accounts).filter((acc) => acc.alias !== alias && acc.enabled !== false).length;
                     if (enabledCount === 0) {
                         sendJson(res, 409, {
                             error: 'Cannot disable the last enabled account',
@@ -1381,7 +1404,7 @@ export function startWebConsole(options) {
                     active,
                     alias: forceState.forcedAlias,
                     forcedAt: forceState.forcedAlias && forceState.forcedUntil
-                        ? forceState.forcedUntil - (24 * 60 * 60 * 1000)
+                        ? forceState.forcedUntil - 24 * 60 * 60 * 1000
                         : null,
                     forcedUntil: forceState.forcedUntil,
                     forcedBy: forceState.forcedBy,
@@ -1402,8 +1425,10 @@ export function startWebConsole(options) {
                 }
                 const result = activateForce(alias, actor);
                 if (!result.success) {
-                    const statusCode = result.error?.includes('not found') ? 404
-                        : result.error?.includes('disabled') ? 409
+                    const statusCode = result.error?.includes('not found')
+                        ? 404
+                        : result.error?.includes('disabled')
+                            ? 409
                             : 400;
                     sendJson(res, statusCode, { error: result.error, code: 'FORCE_FAILED' });
                     return;

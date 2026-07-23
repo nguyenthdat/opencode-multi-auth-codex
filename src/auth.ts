@@ -57,7 +57,7 @@ export async function createAuthorizationFlow(port?: number): Promise<Authorizat
   const state = randomBytes(16).toString('hex')
   const redirectPort = port || DEFAULT_REDIRECT_PORTS[0]
   const redirectUri = getRedirectUri(redirectPort)
-  
+
   const authUrl = new URL(AUTHORIZE_URL)
   authUrl.searchParams.set('client_id', CLIENT_ID)
   authUrl.searchParams.set('redirect_uri', redirectUri)
@@ -88,10 +88,7 @@ function tryListenOnPort(server: http.Server, port: number): Promise<void> {
   })
 }
 
-async function findAvailablePort(
-  server: http.Server,
-  ports: number[]
-): Promise<number> {
+async function findAvailablePort(server: http.Server, ports: number[]): Promise<number> {
   for (const port of ports) {
     try {
       await tryListenOnPort(server, port)
@@ -194,9 +191,13 @@ export async function loginAccount(
         const now = Date.now()
         const accessClaims = decodeJwtPayload(tokens.access_token)
         const idClaims = tokens.id_token ? decodeJwtPayload(tokens.id_token) : null
-        const expiresAt = getExpiryFromClaims(accessClaims) || getExpiryFromClaims(idClaims) || now + tokens.expires_in * 1000
+        const expiresAt =
+          getExpiryFromClaims(accessClaims) ||
+          getExpiryFromClaims(idClaims) ||
+          now + tokens.expires_in * 1000
 
-        let email: string | undefined = getEmailFromClaims(idClaims) || getEmailFromClaims(accessClaims)
+        let email: string | undefined =
+          getEmailFromClaims(idClaims) || getEmailFromClaims(accessClaims)
         try {
           const userRes = await fetch(`${OPENAI_ISSUER}/userinfo`, {
             headers: { Authorization: `Bearer ${tokens.access_token}` }
@@ -209,36 +210,37 @@ export async function loginAccount(
           /* user info fetch is non-critical */
         }
 
-        const accountId =
-          getAccountIdFromClaims(idClaims) ||
-          getAccountIdFromClaims(accessClaims)
-        const planType =
-          getPlanTypeFromClaims(idClaims) ||
-          getPlanTypeFromClaims(accessClaims)
+        const accountId = getAccountIdFromClaims(idClaims) || getAccountIdFromClaims(accessClaims)
+        const planType = getPlanTypeFromClaims(idClaims) || getPlanTypeFromClaims(accessClaims)
 
-        const store = await withWriteLock(() => saveAuthenticatedAccount(
-          alias,
-          {
-            accessToken: tokens.access_token,
-            refreshToken,
-            idToken: tokens.id_token,
-            accountId,
-            planType,
-            expiresAt,
-            email,
-            lastRefresh: new Date(now).toISOString(),
-            lastSeenAt: now,
-            source: 'opencode',
-            authInvalid: false,
-            authInvalidatedAt: undefined
-          },
-          options?.existingEmailPolicy,
-          options?.expectedEmail
-        ))
+        const store = await withWriteLock(() =>
+          saveAuthenticatedAccount(
+            alias,
+            {
+              accessToken: tokens.access_token,
+              refreshToken,
+              idToken: tokens.id_token,
+              accountId,
+              planType,
+              expiresAt,
+              email,
+              lastRefresh: new Date(now).toISOString(),
+              lastSeenAt: now,
+              source: 'opencode',
+              authInvalid: false,
+              authInvalidatedAt: undefined
+            },
+            options?.existingEmailPolicy,
+            options?.expectedEmail
+          )
+        )
 
-        const account = options?.existingEmailPolicy === 'update' && email
-          ? Object.values(store.accounts).find((entry) => entry.email?.trim().toLowerCase() === email.trim().toLowerCase()) || store.accounts[alias]
-          : store.accounts[alias]
+        const account =
+          options?.existingEmailPolicy === 'update' && email
+            ? Object.values(store.accounts).find(
+                (entry) => entry.email?.trim().toLowerCase() === email.trim().toLowerCase()
+              ) || store.accounts[alias]
+            : store.accounts[alias]
         if (!account) {
           throw new Error('Authenticated account was not persisted')
         }
@@ -264,7 +266,7 @@ export async function loginAccount(
 
     try {
       const actualPort = await findAvailablePort(server, ports)
-      
+
       if (!activeFlow || activeFlow.port !== actualPort) {
         activeFlow = await createAuthorizationFlow(actualPort)
       }
@@ -279,7 +281,11 @@ export async function loginAccount(
     }
 
     timeout = setTimeout(() => {
-      finish(() => reject(new Error(`Login timeout after ${Math.round(timeoutMs / 1000)}s - no callback received`)))
+      finish(() =>
+        reject(
+          new Error(`Login timeout after ${Math.round(timeoutMs / 1000)}s - no callback received`)
+        )
+      )
     }, timeoutMs)
   })
 }
@@ -323,7 +329,10 @@ export async function refreshToken(alias: string): Promise<AccountCredentials | 
     const tokens = (await tokenRes.json()) as TokenResponse
     const accessClaims = decodeJwtPayload(tokens.access_token)
     const idClaims = tokens.id_token ? decodeJwtPayload(tokens.id_token) : null
-    const expiresAt = getExpiryFromClaims(accessClaims) || getExpiryFromClaims(idClaims) || Date.now() + tokens.expires_in * 1000
+    const expiresAt =
+      getExpiryFromClaims(accessClaims) ||
+      getExpiryFromClaims(idClaims) ||
+      Date.now() + tokens.expires_in * 1000
 
     const updates: Partial<AccountCredentials> = {
       accessToken: tokens.access_token,
@@ -336,9 +345,7 @@ export async function refreshToken(alias: string): Promise<AccountCredentials | 
         getAccountIdFromClaims(accessClaims) ||
         account.accountId,
       planType:
-        getPlanTypeFromClaims(idClaims) ||
-        getPlanTypeFromClaims(accessClaims) ||
-        account.planType
+        getPlanTypeFromClaims(idClaims) || getPlanTypeFromClaims(accessClaims) || account.planType
     }
 
     const updatedStore = updateAccount(alias, updates)

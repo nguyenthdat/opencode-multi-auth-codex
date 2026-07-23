@@ -2,11 +2,11 @@ version: 2
 
 updates:
   - package-ecosystem: bun
-    directory: "/"
+    directory: '/'
     schedule:
       interval: weekly
       day: monday
-      time: "09:00"
+      time: '09:00'
       timezone: Asia/Ho_Chi_Minh
     open-pull-requests-limit: 5
     reviewers:
@@ -14,28 +14,28 @@ updates:
     labels:
       - dependencies
     commit-message:
-      prefix: "chore(deps)"
+      prefix: 'chore(deps)'
     ignore:
-      - dependency-name: "*"
+      - dependency-name: '*'
         update-types:
           - version-update:semver-major
     groups:
       opencode-runtime:
         patterns:
-          - "@opencode-ai/*"
-          - "@opentui/*"
+          - '@opencode-ai/*'
+          - '@opentui/*'
           - solid-js
       development-tools:
         dependency-type: development
         patterns:
-          - "*"
+          - '*'
 
   - package-ecosystem: github-actions
-    directory: "/"
+    directory: '/'
     schedule:
       interval: weekly
       day: monday
-      time: "09:30"
+      time: '09:30'
       timezone: Asia/Ho_Chi_Minh
     open-pull-requests-limit: 5
     reviewers:
@@ -44,8 +44,8 @@ updates:
       - dependencies
       - github-actions
     commit-message:
-      prefix: "chore(ci)"
+      prefix: 'chore(ci)'
     groups:
       github-actions:
         patterns:
-          - "*"
+          - '*'

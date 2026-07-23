@@ -58,10 +58,14 @@ describe('TUI account summaries', () => {
 
   it('shows Force Mode when the account is pinned', () => {
     const value = account()
-    const summary = getTuiAccountSummary(value, store(value, {
-      forcedAlias: value.alias,
-      forcedUntil: now + 60_000
-    }), now)
+    const summary = getTuiAccountSummary(
+      value,
+      store(value, {
+        forcedAlias: value.alias,
+        forcedUntil: now + 60_000
+      }),
+      now
+    )
 
     expect(summary.status).toBe('forced')
   })

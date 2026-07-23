@@ -11,8 +11,9 @@
 ## Executive Summary
 
 All phases A, B, C, and D are **COMPLETE and PRODUCTION READY** with the following status:
+
 - ✅ Build: PASS
-- ✅ Lint: PASS  
+- ✅ Lint: PASS
 - ✅ Tests: 49/49 PASS (100%)
 - ⚠️ Phase E: In Progress (separate work stream)
 
@@ -23,16 +24,19 @@ All phases A, B, C, and D are **COMPLETE and PRODUCTION READY** with the followi
 ### Implementation Status: COMPLETE
 
 **Files Modified:**
+
 - Repository cloned and initialized
 - Dependencies installed (295 packages)
 - Baseline captured in docs/QA.md
 
 **Verification:**
+
 - [x] `npm ci` - PASS
 - [x] `npm run build` - PASS
 - [x] `npx tsc --noEmit` - PASS
 
 **Deliverables:**
+
 - docs/QA.md baseline documentation
 - All tracked files present
 - No uncommitted changes in baseline
@@ -76,6 +80,7 @@ All phases A, B, C, and D are **COMPLETE and PRODUCTION READY** with the followi
    - Probation period for recovered accounts
 
 **Test Coverage:**
+
 - tests/unit/store.test.ts: Store operations, migration, validation
 - tests/unit/errors.test.ts: Error factory functions
 - tests/unit/localhost.test.ts: Localhost pattern validation
@@ -116,6 +121,7 @@ All phases A, B, C, and D are **COMPLETE and PRODUCTION READY** with the followi
    - Source file tracking
 
 **Test Coverage:**
+
 - tests/unit/probe-limits.test.ts: 26 new tests
   - Confidence calculation
   - Error handling
@@ -124,6 +130,7 @@ All phases A, B, C, and D are **COMPLETE and PRODUCTION READY** with the followi
 - **Total: 49 tests (26 new)**
 
 **New Environment Variables:**
+
 - OPENCODE_MULTI_AUTH_PROBE_EFFORT: Override probe reasoning effort
 - OPENCODE_MULTI_AUTH_LIMITS_PROBE_MODELS: Custom probe model list
 
@@ -180,6 +187,7 @@ All phases A, B, C, and D are **COMPLETE and PRODUCTION READY** with the followi
 ### Status: IN PROGRESS (Parallel Work Stream)
 
 **Note:** Phase E is being developed in parallel. Current issues:
+
 - TypeScript error in src/force-mode.ts line 86
 - Type mismatch: 'string | null | undefined' vs 'string | null'
 
@@ -190,6 +198,7 @@ All phases A, B, C, and D are **COMPLETE and PRODUCTION READY** with the followi
 ## Production Readiness Checklist
 
 ### Code Quality ✅
+
 - [x] No TypeScript errors (except Phase E in-progress)
 - [x] All tests pass (49/49)
 - [x] Consistent code style
@@ -197,6 +206,7 @@ All phases A, B, C, and D are **COMPLETE and PRODUCTION READY** with the followi
 - [x] Sensitive data redaction
 
 ### Security ✅
+
 - [x] Localhost-only binding
 - [x] Token redaction in logs
 - [x] Proper input validation
@@ -204,6 +214,7 @@ All phases A, B, C, and D are **COMPLETE and PRODUCTION READY** with the followi
 - [x] Safe file permissions (0o600)
 
 ### Testing ✅
+
 - [x] Unit tests for core logic
 - [x] Store operation tests
 - [x] Error handling tests
@@ -211,12 +222,14 @@ All phases A, B, C, and D are **COMPLETE and PRODUCTION READY** with the followi
 - [x] 100% test pass rate
 
 ### Documentation ✅
+
 - [x] docs/QA.md updated
 - [x] IMPLEMENTATION_PLAN.md current
 - [x] Environment variables documented
 - [x] API endpoints documented
 
 ### Migration Safety ✅
+
 - [x] v1 → v2 store migration automatic
 - [x] Backward compatible
 - [x] No breaking changes
@@ -226,12 +239,16 @@ All phases A, B, C, and D are **COMPLETE and PRODUCTION READY** with the followi
 ## Issues Found & Fixed
 
 ### Phase C Template Literal Escaping
+
 **Status:** FIXED
+
 - Issue: Backticks in HTML template caused build errors
 - Fix: Escaped backticks in src/web.ts
 
-### Phase D Template Literal Escaping  
+### Phase D Template Literal Escaping
+
 **Status:** FIXED
+
 - Issue: CSS.escape() with template literals in HTML
 - Fix: Proper escaping with \`${...}\`
 
@@ -240,6 +257,7 @@ All phases A, B, C, and D are **COMPLETE and PRODUCTION READY** with the followi
 ## Recommendations
 
 ### Before Phase H (Full Validation):
+
 1. Complete Phase E (Force Mode) and fix TypeScript errors
 2. Add integration tests for new APIs
 3. Add headless UI tests for toggle/reauth flows
@@ -247,6 +265,7 @@ All phases A, B, C, and D are **COMPLETE and PRODUCTION READY** with the followi
 5. Verify no regressions in rotation logic
 
 ### Parallel Work:
+
 - Phase E can continue in parallel
 - Phases F (Settings) and G (Non-Core) can start now
 - Phase H should wait for all phases A-G complete
@@ -258,12 +277,14 @@ All phases A, B, C, and D are **COMPLETE and PRODUCTION READY** with the followi
 **Phases A, B, C, and D are PRODUCTION READY.**
 
 The codebase has:
+
 - Solid foundation (Phase A)
-- Reliable runtime (Phase B)  
+- Reliable runtime (Phase B)
 - Accurate limits (Phase C)
 - Account lifecycle controls (Phase D)
 
 **Next Steps:**
+
 1. Complete Phase E (in progress)
 2. Execute Phases F and G in parallel
 3. Proceed to Phase H for comprehensive validation
@@ -273,6 +294,7 @@ The codebase has:
 ## Files Summary
 
 ### Modified (A-D):
+
 - src/types.ts - Account fields, LimitsConfidence
 - src/store.ts - Validation, new fields
 - src/probe-limits.ts - Probe authority, effort config
@@ -283,6 +305,7 @@ The codebase has:
 - docs/QA.md - Documentation
 
 ### New (A-D):
+
 - src/errors.ts
 - tests/unit/store.test.ts
 - tests/unit/errors.test.ts
@@ -290,6 +313,7 @@ The codebase has:
 - tests/unit/probe-limits.test.ts
 
 ### In Progress (E):
+
 - src/force-mode.ts ⚠️ TypeScript error
 
 **Test Coverage:** 49/49 tests passing ✅

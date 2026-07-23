@@ -1,0 +1,16 @@
+pre-commit:
+  jobs:
+    - name: prettier
+      glob: '*.{css,html,js,jsx,json,jsonc,md,ts,tsx,yaml,yml}'
+      exclude: "^(dist/|.opencode/|docs/reddit-benchmark-report\\.html$)"
+      run: bunx prettier --write --ignore-unknown {staged_files}
+      stage_fixed: true
+
+    - name: ruff
+      glob: '*.py'
+      run: uvx --from ruff==0.15.20 ruff format {staged_files}
+      stage_fixed: true
+
+    - name: typecheck
+      glob: '*.{ts,tsx}'
+      run: bun run lint

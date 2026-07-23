@@ -26,6 +26,8 @@ Never hand-edit `dist/`. Run `bun run build` after changes under `src/` or
 
 ```bash
 bun install --frozen-lockfile
+bun run hooks:install
+bun run format:check
 bun run lint
 bun run build
 bun test
@@ -33,6 +35,12 @@ uv run --with 'python-dotenv>=1.2.1,<2' python -m unittest auto-login/test_auto_
 bun audit
 npm pack --dry-run
 ```
+
+Run `bun run hooks:install` once after cloning. This sets a repository-local
+hooks path without changing the global Git configuration. The pre-commit hook
+formats staged files with Prettier or Ruff, stages those fixes, and type-checks
+staged TypeScript changes. Run `bun run format` to format the whole source tree
+manually.
 
 Build before dashboard smoke tests so the test reads the current React bundle,
 not a stale committed asset. Confirm the package manifest contains

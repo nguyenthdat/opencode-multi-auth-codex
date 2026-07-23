@@ -38,21 +38,23 @@ describe('OpenCode TUI plugin', () => {
     expect(plugin.id).toBe('@nguyenthdat/opencode-multi-auth-codex')
     expect(layers).toHaveLength(1)
     expect(layers[0].mode).toBeUndefined()
-    expect(layers[0].commands).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        name: 'multi-auth.accounts',
-        title: 'Codex accounts',
-        suggested: true,
-        slashName: 'codex',
-        slashAliases: ['multi-auth']
-      }),
-      expect.objectContaining({
-        name: 'multi-auth.add',
-        title: 'Add Codex account',
-        slashName: 'codex-add',
-        slashAliases: ['multi-auth-add']
-      })
-    ]))
+    expect(layers[0].commands).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'multi-auth.accounts',
+          title: 'Codex accounts',
+          suggested: true,
+          slashName: 'codex',
+          slashAliases: ['multi-auth']
+        }),
+        expect.objectContaining({
+          name: 'multi-auth.add',
+          title: 'Add Codex account',
+          slashName: 'codex-add',
+          slashAliases: ['multi-auth-add']
+        })
+      ])
+    )
   })
 
   it('renders account lifecycle actions and protects the last enabled account', async () => {
@@ -106,25 +108,29 @@ describe('OpenCode TUI plugin', () => {
       dialogs[0].onSelect(accountOption!)
 
       const actionTitles = dialogs[1].options.map((option) => option.title)
-      expect(actionTitles).toEqual(expect.arrayContaining([
-        'Use on device',
-        'Refresh OAuth token',
-        'Re-authenticate account',
-        'Edit tags and notes',
-        'Check usage and health',
-        'Disable account',
-        'Remove account'
-      ]))
+      expect(actionTitles).toEqual(
+        expect.arrayContaining([
+          'Use on device',
+          'Refresh OAuth token',
+          'Re-authenticate account',
+          'Edit tags and notes',
+          'Check usage and health',
+          'Disable account',
+          'Remove account'
+        ])
+      )
 
       const disableOption = dialogs[1].options.find((option) => option.title === 'Disable account')
       expect(disableOption).toBeDefined()
       dialogs[1].onSelect(disableOption!)
 
       expect(loadStore().accounts.personal.enabled).toBe(true)
-      expect(toasts).toContainEqual(expect.objectContaining({
-        variant: 'error',
-        message: 'Cannot disable the last enabled account'
-      }))
+      expect(toasts).toContainEqual(
+        expect.objectContaining({
+          variant: 'error',
+          message: 'Cannot disable the last enabled account'
+        })
+      )
     } finally {
       if (previousStoreDir === undefined) delete process.env.OPENCODE_MULTI_AUTH_STORE_DIR
       else process.env.OPENCODE_MULTI_AUTH_STORE_DIR = previousStoreDir

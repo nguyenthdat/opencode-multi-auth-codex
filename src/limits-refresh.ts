@@ -86,11 +86,7 @@ export async function refreshRateLimitsForAccount(
         limitStatus: 'error',
         limitError: usage.error,
         lastLimitErrorAt: now,
-        limitsConfidence: calculateLimitsConfidence(
-          account.lastLimitProbeAt,
-          now,
-          'error'
-        )
+        limitsConfidence: calculateLimitsConfidence(account.lastLimitProbeAt, now, 'error')
       })
       dependencies.logInfo(`Skipping limits probe for ${account.alias}: ${usage.error}`)
       return {
@@ -100,7 +96,9 @@ export async function refreshRateLimitsForAccount(
       }
     }
 
-    dependencies.logInfo(`Usage API limits lookup failed for ${account.alias}, falling back to probe: ${usage.error}`)
+    dependencies.logInfo(
+      `Usage API limits lookup failed for ${account.alias}, falling back to probe: ${usage.error}`
+    )
   }
 
   const probe = await dependencies.probeRateLimitsForAccount(account)
@@ -117,16 +115,12 @@ export async function refreshRateLimitsForAccount(
         })
       : undefined
     const rateLimitedUntil = parsedResetAt ?? fallbackResetAt
-    
+
     const updates: Partial<AccountCredentials> = {
       limitStatus: 'error',
       limitError: errorText,
       lastLimitErrorAt: now,
-      limitsConfidence: calculateLimitsConfidence(
-        account.lastLimitProbeAt,
-        now,
-        'error'
-      )
+      limitsConfidence: calculateLimitsConfidence(account.lastLimitProbeAt, now, 'error')
     }
     if (typeof rateLimitedUntil === 'number' && rateLimitedUntil > now) {
       updates.rateLimitedUntil = rateLimitedUntil
@@ -153,7 +147,9 @@ export async function refreshRateLimitsForAccount(
     authInvalidatedAt: undefined
   })
 
-  dependencies.logInfo(`Limits refreshed for ${account.alias} using model ${probe.probeModel || 'unknown'}, effort ${probe.probeEffort || 'default'}`)
+  dependencies.logInfo(
+    `Limits refreshed for ${account.alias} using model ${probe.probeModel || 'unknown'}, effort ${probe.probeEffort || 'default'}`
+  )
   return { alias: account.alias, updated: true }
 }
 

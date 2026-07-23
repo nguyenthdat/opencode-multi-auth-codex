@@ -13,7 +13,11 @@ function isBlocked(until: number | null | undefined, now: number): boolean {
 
 export function formatLimitWindow(window: RateLimitWindow | undefined): string {
   if (!window) return 'unknown'
-  if (typeof window.remaining === 'number' && typeof window.limit === 'number' && window.limit > 0) {
+  if (
+    typeof window.remaining === 'number' &&
+    typeof window.limit === 'number' &&
+    window.limit > 0
+  ) {
     return `${Math.max(0, Math.min(100, Math.round((window.remaining / window.limit) * 100)))}% left`
   }
   if (typeof window.remaining === 'number') {

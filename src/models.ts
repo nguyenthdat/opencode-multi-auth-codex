@@ -3,13 +3,9 @@ import type { OpenAIModel, ProviderModel, ProviderModelOptions } from './types.j
 const MODELS_ENDPOINT = 'https://api.openai.com/v1/models'
 
 export const REASONING_LEVELS = ['none', 'low', 'medium', 'high', 'xhigh', 'max'] as const
-type ReasoningLevel = typeof REASONING_LEVELS[number]
+type ReasoningLevel = (typeof REASONING_LEVELS)[number]
 
-export const GPT_5_6_MODELS = [
-  'gpt-5.6-sol',
-  'gpt-5.6-terra',
-  'gpt-5.6-luna'
-] as const
+export const GPT_5_6_MODELS = ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'] as const
 
 const MODEL_LIMITS: Record<string, { context: number; input?: number; output: number }> = {
   'gpt-5.6-sol': { context: 1_050_000, input: 922_000, output: 128_000 },
@@ -25,7 +21,7 @@ const MODEL_LIMITS: Record<string, { context: number; input?: number; output: nu
   'gpt-5.1': { context: 272000, output: 128000 },
   'gpt-5.1-codex': { context: 272000, output: 128000 },
   'gpt-5.1-codex-max': { context: 272000, output: 128000 },
-  'gpt-5.1-codex-mini': { context: 272000, output: 128000 },
+  'gpt-5.1-codex-mini': { context: 272000, output: 128000 }
 }
 
 function getModelLimits(modelId: string): { context: number; input?: number; output: number } {
@@ -45,7 +41,8 @@ function buildReasoningOptions(level: ReasoningLevel): ProviderModelOptions {
 
   return {
     reasoningEffort,
-    reasoningSummary: reasoningEffort === 'high' || reasoningEffort === 'xhigh' ? 'detailed' : 'auto',
+    reasoningSummary:
+      reasoningEffort === 'high' || reasoningEffort === 'xhigh' ? 'detailed' : 'auto',
     textVerbosity: 'medium',
     include: ['reasoning.encrypted_content'],
     store: false
@@ -110,7 +107,7 @@ export async function fetchAvailableModels(token: string): Promise<OpenAIModel[]
 }
 
 export function filterGPT5Models(models: OpenAIModel[]): OpenAIModel[] {
-  return models.filter(m => m.id.match(/^gpt-5/))
+  return models.filter((m) => m.id.match(/^gpt-5/))
 }
 
 export function generateModelVariants(baseModels: OpenAIModel[]): Record<string, ProviderModel> {

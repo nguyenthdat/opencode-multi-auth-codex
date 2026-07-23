@@ -7,29 +7,73 @@ import { fileURLToPath, URL } from 'node:url'
 import { exec, spawn } from 'node:child_process'
 import { promisify } from 'node:util'
 import { createAuthorizationFlow, loginAccount, refreshToken } from './auth.js'
-import { getCodexAuthPath, getCodexAuthStatus, getCodexAuthSummary, resolveAliasForCurrentAuth, syncCodexAuthFile, writeCodexAuthForAlias } from './codex-auth.js'
-import { AccountEmailExistsError, getStoreStatus, listAccounts, loadStore, removeAccount, updateAccount } from './store.js'
+import {
+  getCodexAuthPath,
+  getCodexAuthStatus,
+  getCodexAuthSummary,
+  resolveAliasForCurrentAuth,
+  syncCodexAuthFile,
+  writeCodexAuthForAlias
+} from './codex-auth.js'
+import {
+  AccountEmailExistsError,
+  getStoreStatus,
+  listAccounts,
+  loadStore,
+  removeAccount,
+  updateAccount
+} from './store.js'
 import { getRefreshQueueState, startRefreshQueue, stopRefreshQueue } from './refresh-queue.js'
 import { getLogPath, logError, logInfo, readLogTail } from './logger.js'
-import { getForceState, activateForce, clearForce, isForceActive, getRemainingForceTimeMs, formatForceDuration } from './force-mode.js'
+import {
+  getForceState,
+  activateForce,
+  clearForce,
+  isForceActive,
+  getRemainingForceTimeMs,
+  formatForceDuration
+} from './force-mode.js'
 import { getSettings, getRuntimeSettings, updateSettings, isFeatureEnabled } from './settings.js'
 import { Errors } from './errors.js'
-import type { AccountCredentials, RateLimitWindow, LimitsConfidence, RotationSettings, WeightPreset } from './types.js'
+import type {
+  AccountCredentials,
+  RateLimitWindow,
+  LimitsConfidence,
+  RotationSettings,
+  WeightPreset
+} from './types.js'
 
 const DEFAULT_HOST = '127.0.0.1'
 const DEFAULT_PORT = 3434
 const LOCALHOST_HOST_PATTERN = /^(127\.0\.0\.1|::1|localhost)$/i
 const SYNC_INTERVAL_MS = 3000
 const SYNC_DEBOUNCE_MS = 600
-const ANTIGRAVITY_ACCOUNTS_FILE = path.join(os.homedir(), '.config', 'opencode', 'antigravity-accounts.json')
+const ANTIGRAVITY_ACCOUNTS_FILE = path.join(
+  os.homedir(),
+  '.config',
+  'opencode',
+  'antigravity-accounts.json'
+)
 const LOGIN_TIMEOUT_MS = 5 * 60 * 1000
 const AUTO_LOGIN_TIMEOUT_MS = 6 * 60 * 1000
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url))
 const AUTO_LOGIN_SCRIPT_ENV = 'OPENCODE_MULTI_AUTH_AUTO_LOGIN_SCRIPT'
 const AUTO_LOGIN_CREDENTIALS_ENV = 'OPENCODE_MULTI_AUTH_AUTO_LOGIN_CREDENTIALS_FILE'
 const AUTO_LOGIN_PYTHON_ENV = 'OPENCODE_MULTI_AUTH_AUTO_LOGIN_PYTHON'
-const DEFAULT_AUTO_LOGIN_CREDENTIALS_FILE = path.join(os.homedir(), '.config', 'opencode-multi-auth', 'credentials.json')
-const DEFAULT_AUTO_LOGIN_VENV_PYTHON = path.join(os.homedir(), '.config', 'opencode-multi-auth', '.venv', 'bin', 'python')
+const DEFAULT_AUTO_LOGIN_CREDENTIALS_FILE = path.join(
+  os.homedir(),
+  '.config',
+  'opencode-multi-auth',
+  'credentials.json'
+)
+const DEFAULT_AUTO_LOGIN_VENV_PYTHON = path.join(
+  os.homedir(),
+  '.config',
+  'opencode-multi-auth',
+  '.venv',
+  'bin',
+  'python'
+)
 
 type AutoLoginMode = 'manual' | 'auto'
 
@@ -122,7 +166,8 @@ const WEB_UI_ASSETS: Record<string, { file: string; contentType: string }> = {
 }
 
 const WEB_SECURITY_HEADERS = {
-  'Content-Security-Policy': "default-src 'self'; base-uri 'none'; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; img-src 'self' data:; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'",
+  'Content-Security-Policy':
+    "default-src 'self'; base-uri 'none'; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; img-src 'self' data:; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'",
   'Referrer-Policy': 'no-referrer',
   'X-Content-Type-Options': 'nosniff'
 }
@@ -184,7 +229,9 @@ function sendAutoLoginError(res: http.ServerResponse, err: unknown): void {
   sendJson(res, 500, { error: String(err) })
 }
 
-function scrubAccount(account: AccountCredentials): Omit<AccountCredentials, 'accessToken' | 'refreshToken' | 'idToken'> {
+function scrubAccount(
+  account: AccountCredentials
+): Omit<AccountCredentials, 'accessToken' | 'refreshToken' | 'idToken'> {
   const { accessToken, refreshToken, idToken, ...rest } = account
   return rest
 }
@@ -218,7 +265,8 @@ async function readJsonBody(req: http.IncomingMessage): Promise<Record<string, a
 }
 
 function remainingPercent(window?: RateLimitWindow): number | null {
-  if (!window || typeof window.remaining !== 'number' || typeof window.limit !== 'number') return null
+  if (!window || typeof window.remaining !== 'number' || typeof window.limit !== 'number')
+    return null
   if (window.limit === 0) return null
   return Math.round((window.remaining / window.limit) * 100)
 }
@@ -236,9 +284,10 @@ function recommendAlias(accounts: AccountCredentials[]): string | null {
       continue
     }
     const weeklyPercent = remainingPercent(account.rateLimits?.weekly) ?? -1
-    const weeklyRemaining = typeof account.rateLimits?.weekly?.remaining === 'number'
-      ? account.rateLimits.weekly.remaining
-      : -1
+    const weeklyRemaining =
+      typeof account.rateLimits?.weekly?.remaining === 'number'
+        ? account.rateLimits.weekly.remaining
+        : -1
     const fivePercent = remainingPercent(account.rateLimits?.fiveHour) ?? -1
 
     if (weeklyPercent < 0 && weeklyRemaining < 0 && fivePercent < 0) {
@@ -249,11 +298,9 @@ function recommendAlias(accounts: AccountCredentials[]): string | null {
       !best ||
       weeklyPercent > best.weeklyPercent ||
       (weeklyPercent === best.weeklyPercent && weeklyRemaining > best.weeklyRemaining) ||
-      (
-        weeklyPercent === best.weeklyPercent &&
+      (weeklyPercent === best.weeklyPercent &&
         weeklyRemaining === best.weeklyRemaining &&
-        fivePercent > best.fivePercent
-      )
+        fivePercent > best.fivePercent)
     ) {
       best = { alias: account.alias, weeklyPercent, weeklyRemaining, fivePercent }
     }
@@ -301,7 +348,9 @@ function ensureAutoLoginCredentialsDir(credentialsPath: string): void {
   }
 }
 
-function readAutoLoginCredentialsFile(credentialsPath = getAutoLoginCredentialsPath()): AutoLoginCredentialsFile {
+function readAutoLoginCredentialsFile(
+  credentialsPath = getAutoLoginCredentialsPath()
+): AutoLoginCredentialsFile {
   if (!fs.existsSync(credentialsPath)) {
     return { accounts: [] }
   }
@@ -312,7 +361,10 @@ function readAutoLoginCredentialsFile(credentialsPath = getAutoLoginCredentialsP
   }
 }
 
-function writeAutoLoginCredentialsFile(credentialsPath: string, data: AutoLoginCredentialsFile): void {
+function writeAutoLoginCredentialsFile(
+  credentialsPath: string,
+  data: AutoLoginCredentialsFile
+): void {
   ensureAutoLoginCredentialsDir(credentialsPath)
   fs.writeFileSync(credentialsPath, `${JSON.stringify(data, null, 2)}\n`, { mode: 0o600 })
   try {
@@ -340,8 +392,8 @@ function upsertAutoLoginCredentials(input: AutoLoginCreateInput): AutoLoginAccou
   const credentialsPath = getAutoLoginCredentialsPath()
   const file = readAutoLoginCredentialsFile(credentialsPath)
   const accounts = Array.isArray(file.accounts) ? [...file.accounts] : []
-  const existingIndex = accounts.findIndex((entry) =>
-    typeof entry.email === 'string' && entry.email.toLowerCase() === email.toLowerCase()
+  const existingIndex = accounts.findIndex(
+    (entry) => typeof entry.email === 'string' && entry.email.toLowerCase() === email.toLowerCase()
   )
   const existing = existingIndex >= 0 ? accounts[existingIndex] : undefined
   const aliasSource =
@@ -405,7 +457,9 @@ function loadAutoLoginConfig(): AutoLoginConfigState {
   }
 
   try {
-    const parsed = JSON.parse(fs.readFileSync(pathValue, 'utf-8')) as { accounts?: Array<Record<string, unknown>> }
+    const parsed = JSON.parse(fs.readFileSync(pathValue, 'utf-8')) as {
+      accounts?: Array<Record<string, unknown>>
+    }
     const accounts = Array.isArray(parsed?.accounts) ? parsed.accounts : []
     const view = accounts
       .map((entry) => {
@@ -438,22 +492,35 @@ function loadAutoLoginConfig(): AutoLoginConfigState {
   }
 }
 
-function findAutoLoginAccount(config: AutoLoginConfigState, selector: string): AutoLoginAccountView | null {
+function findAutoLoginAccount(
+  config: AutoLoginConfigState,
+  selector: string
+): AutoLoginAccountView | null {
   const normalized = selector.trim().toLowerCase()
   if (!normalized) return null
-  return config.accounts.find((account) =>
-    account.email.toLowerCase() === normalized || account.alias.toLowerCase() === normalized
-  ) || null
-}
-
-function findStoreAccountByEmail(store: ReturnType<typeof loadStore>, email: string): AccountCredentials | undefined {
-  const normalized = email.trim().toLowerCase()
-  return Object.values(store.accounts).find((account) =>
-    typeof account.email === 'string' && account.email.trim().toLowerCase() === normalized
+  return (
+    config.accounts.find(
+      (account) =>
+        account.email.toLowerCase() === normalized || account.alias.toLowerCase() === normalized
+    ) || null
   )
 }
 
-function resolveAutoLoginAlias(store: ReturnType<typeof loadStore>, account: AutoLoginAccountView): string {
+function findStoreAccountByEmail(
+  store: ReturnType<typeof loadStore>,
+  email: string
+): AccountCredentials | undefined {
+  const normalized = email.trim().toLowerCase()
+  return Object.values(store.accounts).find(
+    (account) =>
+      typeof account.email === 'string' && account.email.trim().toLowerCase() === normalized
+  )
+}
+
+function resolveAutoLoginAlias(
+  store: ReturnType<typeof loadStore>,
+  account: AutoLoginAccountView
+): string {
   const existing = findStoreAccountByEmail(store, account.email)
   if (existing) {
     return existing.alias
@@ -483,9 +550,7 @@ function updatePendingLogin(patch: Partial<PendingLoginState>): void {
 }
 
 function appendPendingLoginOutput(line: string): void {
-  const normalized = line
-    .replace(/\x1b\[[0-9;]*m/g, '')
-    .trim()
+  const normalized = line.replace(/\x1b\[[0-9;]*m/g, '').trim()
   if (!normalized || !pendingLogin) return
   const output = [...pendingLogin.output, normalized].slice(-6)
   updatePendingLogin({
@@ -555,7 +620,11 @@ function startManualLogin(alias: string): Promise<{ ok: true; url: string }> {
   })
 }
 
-async function startAutoLogin(selector: string, visible = false, force = false): Promise<{ ok: true; alias: string; email: string; url: string }> {
+async function startAutoLogin(
+  selector: string,
+  visible = false,
+  force = false
+): Promise<{ ok: true; alias: string; email: string; url: string }> {
   if (pendingLogin) {
     throw new Error(`Login already in progress for ${pendingLogin.alias}`)
   }
@@ -684,7 +753,10 @@ async function startAutoLogin(selector: string, visible = false, force = false):
   }
 }
 
-async function saveAutoLoginAccountAndStart(input: AutoLoginCreateInput, force = false): Promise<{ ok: true; alias: string; email: string; url: string }> {
+async function saveAutoLoginAccountAndStart(
+  input: AutoLoginCreateInput,
+  force = false
+): Promise<{ ok: true; alias: string; email: string; url: string }> {
   if (!force) {
     const existing = findStoreAccountByEmail(loadStore(), input.email)
     if (existing) {
@@ -767,7 +839,11 @@ function loadAntigravityAccounts(): {
   readAt?: number
   accounts: AntigravityAccountView[]
 } {
-  const result = { path: ANTIGRAVITY_ACCOUNTS_FILE, accounts: [] as AntigravityAccountView[], readAt: Date.now() }
+  const result = {
+    path: ANTIGRAVITY_ACCOUNTS_FILE,
+    accounts: [] as AntigravityAccountView[],
+    readAt: Date.now()
+  }
   if (!fs.existsSync(ANTIGRAVITY_ACCOUNTS_FILE)) {
     return { ...result, error: 'antigravity-accounts.json not found' }
   }
@@ -783,9 +859,10 @@ function loadAntigravityAccounts(): {
       addedAt: acc?.addedAt,
       lastUsed: acc?.lastUsed,
       hasRefreshToken: Boolean(acc?.refreshToken),
-      rateLimitResetTimes: acc?.rateLimitResetTimes && typeof acc.rateLimitResetTimes === 'object'
-        ? acc.rateLimitResetTimes
-        : undefined
+      rateLimitResetTimes:
+        acc?.rateLimitResetTimes && typeof acc.rateLimitResetTimes === 'object'
+          ? acc.rateLimitResetTimes
+          : undefined
     }))
     return { ...result, activeIndex, accounts: view }
   } catch (err) {
@@ -812,7 +889,12 @@ function getAntigravityProcessName(): string | null {
   return null
 }
 
-async function detectAntigravityProcessInfo(): Promise<{ pid: number; extensionPort: number; csrfToken: string; connectPort: number } | null> {
+async function detectAntigravityProcessInfo(): Promise<{
+  pid: number
+  extensionPort: number
+  csrfToken: string
+  connectPort: number
+} | null> {
   const processName = getAntigravityProcessName()
   if (!processName) {
     throw new Error('Unsupported platform for Antigravity quotas')
@@ -821,7 +903,8 @@ async function detectAntigravityProcessInfo(): Promise<{ pid: number; extensionP
     throw new Error('Antigravity quota detection is not implemented for Windows yet')
   }
 
-  const cmd = process.platform === 'darwin' ? `pgrep -fl ${processName}` : `pgrep -af ${processName}`
+  const cmd =
+    process.platform === 'darwin' ? `pgrep -fl ${processName}` : `pgrep -af ${processName}`
   const { stdout } = await execAsync(cmd)
   const lines = stdout
     .split('\n')
@@ -882,7 +965,12 @@ async function listListeningPorts(pid: number): Promise<number[]> {
   }
 }
 
-function antigravityRequest<T>(port: number, csrfToken: string, pathName: string, body: object): Promise<T> {
+function antigravityRequest<T>(
+  port: number,
+  csrfToken: string,
+  pathName: string,
+  body: object
+): Promise<T> {
   return new Promise((resolve, reject) => {
     const payload = JSON.stringify(body)
     const req = https.request(
@@ -902,7 +990,9 @@ function antigravityRequest<T>(port: number, csrfToken: string, pathName: string
       },
       (res) => {
         let data = ''
-        res.on('data', (chunk) => { data += chunk })
+        res.on('data', (chunk) => {
+          data += chunk
+        })
         res.on('end', () => {
           try {
             resolve(JSON.parse(data) as T)
@@ -956,8 +1046,16 @@ function formatAntigravityDuration(ms: number, resetTime?: number): string {
   }
   if (!resetTime) return duration
   const resetDate = new Date(resetTime)
-  const dateStr = resetDate.toLocaleDateString(undefined, { day: '2-digit', month: '2-digit', year: 'numeric' })
-  const timeStr = resetDate.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false })
+  const dateStr = resetDate.toLocaleDateString(undefined, {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  })
+  const timeStr = resetDate.toLocaleTimeString(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  })
   return `${duration} (${dateStr} ${timeStr})`
 }
 
@@ -1055,12 +1153,12 @@ function parseAntigravityQuota(data: any): AntigravityQuotaSnapshot {
     .map((model: any) => {
       const reset = model.quotaInfo?.resetTime ? new Date(model.quotaInfo.resetTime) : null
       const resetTime = reset ? reset.getTime() : undefined
-      const remainingFraction = typeof model.quotaInfo?.remainingFraction === 'number'
-        ? model.quotaInfo.remainingFraction
-        : undefined
-      const remainingPercentage = typeof remainingFraction === 'number'
-        ? remainingFraction * 100
-        : undefined
+      const remainingFraction =
+        typeof model.quotaInfo?.remainingFraction === 'number'
+          ? model.quotaInfo.remainingFraction
+          : undefined
+      const remainingPercentage =
+        typeof remainingFraction === 'number' ? remainingFraction * 100 : undefined
       const diff = resetTime ? resetTime - Date.now() : undefined
       const label = model.label || model.modelOrAlias?.model || 'model'
       const modelId = model.modelOrAlias?.model || model.modelOrAlias?.alias || 'unknown'
@@ -1072,7 +1170,8 @@ function parseAntigravityQuota(data: any): AntigravityQuotaSnapshot {
         isExhausted: remainingFraction === 0,
         resetTime,
         timeUntilResetMs: diff,
-        timeUntilResetFormatted: typeof diff === 'number' ? formatAntigravityDuration(diff, resetTime) : undefined
+        timeUntilResetFormatted:
+          typeof diff === 'number' ? formatAntigravityDuration(diff, resetTime) : undefined
       }
     })
 
@@ -1168,602 +1267,585 @@ export function startWebConsole(options?: { port?: number; host?: string }): htt
     const path = requestUrl.pathname
 
     try {
-
-    if (!isAllowedWebAuthority(req.headers.host, port) || !isAllowedWebOrigin(req.headers.origin, port)) {
-      sendJson(res, 403, { error: 'Forbidden request origin', code: 'FORBIDDEN_ORIGIN' })
-      return
-    }
-
-    if (req.method === 'GET' && path === '/') {
-      res.writeHead(200, { ...WEB_SECURITY_HEADERS, 'Content-Type': 'text/html; charset=utf-8' })
-      res.end(REACT_HTML)
-      return
-    }
-
-    if (req.method === 'GET' && WEB_UI_ASSETS[path]) {
-      const asset = WEB_UI_ASSETS[path]
-      const assetPath = resolveWebUiAsset(asset.file)
-      if (!assetPath) {
-        sendJson(res, 404, { error: `Dashboard asset not found: ${asset.file}` })
+      if (
+        !isAllowedWebAuthority(req.headers.host, port) ||
+        !isAllowedWebOrigin(req.headers.origin, port)
+      ) {
+        sendJson(res, 403, { error: 'Forbidden request origin', code: 'FORBIDDEN_ORIGIN' })
         return
       }
-      res.writeHead(200, {
-        ...WEB_SECURITY_HEADERS,
-        'Content-Type': asset.contentType,
-        'Cache-Control': 'no-cache'
-      })
-      fs.createReadStream(assetPath).pipe(res)
-      return
-    }
 
-    if (req.method === 'GET' && path === '/api/state') {
-      runSync()
-      const store = loadStore()
-      const rawAccounts = Object.values(store.accounts)
-      const accounts = rawAccounts.map(scrubAccount)
-      const deviceAlias = resolveAliasForCurrentAuth(store)
-      const authSummary = getCodexAuthSummary()
-      const storeStatus = getStoreStatus()
-      // Phase G: Only load antigravity if feature is enabled
-      const settings = getSettings()
-      const runtimeSettings = getRuntimeSettings()
-      const antigravityEnabled = settings.settings.featureFlags?.antigravityEnabled ?? false
-      const antigravity = antigravityEnabled ? loadAntigravityAccounts() : { accounts: [], path: ANTIGRAVITY_ACCOUNTS_FILE }
-      const forceState = getForceState()
-      const forceActive = isForceActive()
-      const autoLogin = loadAutoLoginConfig()
-      sendJson(res, 200, {
-        authPath: getCodexAuthPath(),
-        deviceAlias,
-        rotationAlias: store.activeAlias,
-        accounts,
-        lastSyncAt,
-        lastSyncError,
-        lastSyncAlias,
-        authSummary,
-        storeStatus,
-        login: pendingLogin,
-        lastLoginError,
-        // Phase G: Only include antigravity data if feature is enabled
-        antigravity: antigravityEnabled ? { ...antigravity, quota: antigravityQuotaState } : { accounts: [], path: ANTIGRAVITY_ACCOUNTS_FILE, quota: { status: 'disabled', scope: 'active' } },
-        queue: getRefreshQueueState(),
-        recommendedAlias: recommendAlias(rawAccounts),
-        logPath: getLogPath(),
-        autoLogin,
-        rotationStrategy: runtimeSettings.settings.rotationStrategy,
-        force: {
-          active: forceActive,
-          alias: forceState.forcedAlias,
-          forcedUntil: forceState.forcedUntil,
-          forcedBy: forceState.forcedBy,
-          remainingMs: getRemainingForceTimeMs(),
-          remainingTime: formatForceDuration(getRemainingForceTimeMs())
-        },
-        // Phase G: Include feature flags in state
-        featureFlags: settings.settings.featureFlags || { antigravityEnabled: false }
-      })
-      return
-    }
+      if (req.method === 'GET' && path === '/') {
+        res.writeHead(200, { ...WEB_SECURITY_HEADERS, 'Content-Type': 'text/html; charset=utf-8' })
+        res.end(REACT_HTML)
+        return
+      }
 
-    if (req.method === 'GET' && path === '/api/logs') {
-      const limitParam = requestUrl.searchParams.get('limit')
-      const limit = limitParam ? Number(limitParam) : undefined
-      const lines = readLogTail(Number.isFinite(limit) ? limit : undefined)
-      sendJson(res, 200, { path: getLogPath(), lines })
-      return
-    }
+      if (req.method === 'GET' && WEB_UI_ASSETS[path]) {
+        const asset = WEB_UI_ASSETS[path]
+        const assetPath = resolveWebUiAsset(asset.file)
+        if (!assetPath) {
+          sendJson(res, 404, { error: `Dashboard asset not found: ${asset.file}` })
+          return
+        }
+        res.writeHead(200, {
+          ...WEB_SECURITY_HEADERS,
+          'Content-Type': asset.contentType,
+          'Cache-Control': 'no-cache'
+        })
+        fs.createReadStream(assetPath).pipe(res)
+        return
+      }
 
-    if (req.method === 'POST' && path === '/api/sync') {
-      try {
+      if (req.method === 'GET' && path === '/api/state') {
         runSync()
-        sendJson(res, 200, { ok: true })
-      } catch (err) {
-        sendJson(res, 500, { error: String(err) })
+        const store = loadStore()
+        const rawAccounts = Object.values(store.accounts)
+        const accounts = rawAccounts.map(scrubAccount)
+        const deviceAlias = resolveAliasForCurrentAuth(store)
+        const authSummary = getCodexAuthSummary()
+        const storeStatus = getStoreStatus()
+        // Phase G: Only load antigravity if feature is enabled
+        const settings = getSettings()
+        const runtimeSettings = getRuntimeSettings()
+        const antigravityEnabled = settings.settings.featureFlags?.antigravityEnabled ?? false
+        const antigravity = antigravityEnabled
+          ? loadAntigravityAccounts()
+          : { accounts: [], path: ANTIGRAVITY_ACCOUNTS_FILE }
+        const forceState = getForceState()
+        const forceActive = isForceActive()
+        const autoLogin = loadAutoLoginConfig()
+        sendJson(res, 200, {
+          authPath: getCodexAuthPath(),
+          deviceAlias,
+          rotationAlias: store.activeAlias,
+          accounts,
+          lastSyncAt,
+          lastSyncError,
+          lastSyncAlias,
+          authSummary,
+          storeStatus,
+          login: pendingLogin,
+          lastLoginError,
+          // Phase G: Only include antigravity data if feature is enabled
+          antigravity: antigravityEnabled
+            ? { ...antigravity, quota: antigravityQuotaState }
+            : {
+                accounts: [],
+                path: ANTIGRAVITY_ACCOUNTS_FILE,
+                quota: { status: 'disabled', scope: 'active' }
+              },
+          queue: getRefreshQueueState(),
+          recommendedAlias: recommendAlias(rawAccounts),
+          logPath: getLogPath(),
+          autoLogin,
+          rotationStrategy: runtimeSettings.settings.rotationStrategy,
+          force: {
+            active: forceActive,
+            alias: forceState.forcedAlias,
+            forcedUntil: forceState.forcedUntil,
+            forcedBy: forceState.forcedBy,
+            remainingMs: getRemainingForceTimeMs(),
+            remainingTime: formatForceDuration(getRemainingForceTimeMs())
+          },
+          // Phase G: Include feature flags in state
+          featureFlags: settings.settings.featureFlags || { antigravityEnabled: false }
+        })
+        return
       }
-      return
-    }
 
-    if (req.method === 'POST' && path === '/api/auth/start') {
-      const body = await readJsonBody(req)
-      const alias = typeof body.alias === 'string' ? body.alias.trim() : ''
-      if (!alias) {
-        sendJson(res, 400, { error: 'Missing alias' })
+      if (req.method === 'GET' && path === '/api/logs') {
+        const limitParam = requestUrl.searchParams.get('limit')
+        const limit = limitParam ? Number(limitParam) : undefined
+        const lines = readLogTail(Number.isFinite(limit) ? limit : undefined)
+        sendJson(res, 200, { path: getLogPath(), lines })
         return
       }
-      if (pendingLogin) {
-        sendJson(res, 409, { error: `Login already in progress for ${pendingLogin.alias}` })
-        return
-      }
-      try {
-        const result = await startManualLogin(alias)
-        sendJson(res, 200, result)
-      } catch (err) {
-        lastLoginError = String(err)
-        sendJson(res, 500, { error: String(err) })
-      }
-      return
-    }
 
-    if (req.method === 'POST' && path === '/api/auto-login/start') {
-      const body = await readJsonBody(req)
-      const selector = typeof body.selector === 'string' ? body.selector.trim() : ''
-      if (!selector) {
-        sendJson(res, 400, { error: 'Missing selector' })
-        return
-      }
-      try {
-        const result = await startAutoLogin(selector, body.visible === true, body.force === true)
-        sendJson(res, 200, result)
-      } catch (err) {
-        sendAutoLoginError(res, err)
-      }
-      return
-    }
-
-    if (req.method === 'POST' && path === '/api/auto-login/add') {
-      const body = await readJsonBody(req)
-      const email = typeof body.email === 'string' ? body.email.trim() : ''
-      const password = typeof body.password === 'string' ? body.password : ''
-      const alias = typeof body.alias === 'string' ? body.alias.trim() : ''
-      const chatgptPassword = typeof body.chatgptPassword === 'string' ? body.chatgptPassword : ''
-      if (!email) {
-        sendJson(res, 400, { error: 'Missing login/email' })
-        return
-      }
-      if (!password.trim()) {
-        sendJson(res, 400, { error: 'Missing password' })
-        return
-      }
-      try {
-        const result = await saveAutoLoginAccountAndStart({
-          email,
-          password,
-          alias,
-          chatgptPassword
-        }, body.force === true)
-        sendJson(res, 200, result)
-      } catch (err) {
-        sendAutoLoginError(res, err)
-      }
-      return
-    }
-
-    if (req.method === 'POST' && path === '/api/switch') {
-      const body = await readJsonBody(req)
-      if (!body.alias) {
-        sendJson(res, 400, { error: 'Missing alias' })
-        return
-      }
-      try {
-        writeCodexAuthForAlias(body.alias)
-        sendJson(res, 200, { ok: true })
-      } catch (err) {
-        sendJson(res, 400, { error: String(err) })
-      }
-      return
-    }
-
-    if (req.method === 'POST' && path === '/api/remove') {
-      const body = await readJsonBody(req)
-      if (!body.alias) {
-        sendJson(res, 400, { error: 'Missing alias' })
-        return
-      }
-      removeAccount(body.alias)
-      sendJson(res, 200, { ok: true })
-      return
-    }
-
-    if (req.method === 'POST' && path === '/api/account/meta') {
-      const body = await readJsonBody(req)
-      if (!body.alias) {
-        sendJson(res, 400, { error: 'Missing alias' })
-        return
-      }
-      const tags = typeof body.tags === 'string'
-        ? body.tags
-          .split(',')
-          .map((tag: string) => tag.trim().toLowerCase())
-          .filter(Boolean)
-        : []
-      const uniqueTags = Array.from(new Set(tags))
-      const notes = typeof body.notes === 'string' ? body.notes.trim() : ''
-      updateAccount(body.alias, {
-        tags: uniqueTags.length > 0 ? uniqueTags : undefined,
-        notes: notes || undefined
-      })
-      sendJson(res, 200, { ok: true })
-      return
-    }
-
-    if (req.method === 'POST' && path === '/api/token/refresh') {
-      const body = await readJsonBody(req)
-      const store = loadStore()
-      const candidates = Object.values(store.accounts)
-      const alias = typeof body.alias === 'string' ? body.alias : undefined
-      const targets = alias ? candidates.filter((acc) => acc.alias === alias) : candidates
-      if (alias && targets.length === 0) {
-        sendJson(res, 400, { error: 'Unknown alias' })
-        return
-      }
-      const deviceAlias = resolveAliasForCurrentAuth(store)
-
-      const results: Array<{ alias: string; updated: boolean; error?: string }> = []
-      for (const account of targets) {
-        if (!account.refreshToken) {
-          results.push({ alias: account.alias, updated: false, error: 'No refresh token' })
-          continue
+      if (req.method === 'POST' && path === '/api/sync') {
+        try {
+          runSync()
+          sendJson(res, 200, { ok: true })
+        } catch (err) {
+          sendJson(res, 500, { error: String(err) })
         }
-        const refreshed = await refreshToken(account.alias)
-        if (!refreshed) {
-          results.push({ alias: account.alias, updated: false, error: 'Token refresh failed' })
-          continue
-        }
+        return
+      }
 
-        if (deviceAlias === account.alias) {
-          try {
-            writeCodexAuthForAlias(account.alias)
-          } catch (err) {
-            results.push({ alias: account.alias, updated: true, error: `Refreshed, but failed to update auth.json: ${err}` })
+      if (req.method === 'POST' && path === '/api/auth/start') {
+        const body = await readJsonBody(req)
+        const alias = typeof body.alias === 'string' ? body.alias.trim() : ''
+        if (!alias) {
+          sendJson(res, 400, { error: 'Missing alias' })
+          return
+        }
+        if (pendingLogin) {
+          sendJson(res, 409, { error: `Login already in progress for ${pendingLogin.alias}` })
+          return
+        }
+        try {
+          const result = await startManualLogin(alias)
+          sendJson(res, 200, result)
+        } catch (err) {
+          lastLoginError = String(err)
+          sendJson(res, 500, { error: String(err) })
+        }
+        return
+      }
+
+      if (req.method === 'POST' && path === '/api/auto-login/start') {
+        const body = await readJsonBody(req)
+        const selector = typeof body.selector === 'string' ? body.selector.trim() : ''
+        if (!selector) {
+          sendJson(res, 400, { error: 'Missing selector' })
+          return
+        }
+        try {
+          const result = await startAutoLogin(selector, body.visible === true, body.force === true)
+          sendJson(res, 200, result)
+        } catch (err) {
+          sendAutoLoginError(res, err)
+        }
+        return
+      }
+
+      if (req.method === 'POST' && path === '/api/auto-login/add') {
+        const body = await readJsonBody(req)
+        const email = typeof body.email === 'string' ? body.email.trim() : ''
+        const password = typeof body.password === 'string' ? body.password : ''
+        const alias = typeof body.alias === 'string' ? body.alias.trim() : ''
+        const chatgptPassword = typeof body.chatgptPassword === 'string' ? body.chatgptPassword : ''
+        if (!email) {
+          sendJson(res, 400, { error: 'Missing login/email' })
+          return
+        }
+        if (!password.trim()) {
+          sendJson(res, 400, { error: 'Missing password' })
+          return
+        }
+        try {
+          const result = await saveAutoLoginAccountAndStart(
+            {
+              email,
+              password,
+              alias,
+              chatgptPassword
+            },
+            body.force === true
+          )
+          sendJson(res, 200, result)
+        } catch (err) {
+          sendAutoLoginError(res, err)
+        }
+        return
+      }
+
+      if (req.method === 'POST' && path === '/api/switch') {
+        const body = await readJsonBody(req)
+        if (!body.alias) {
+          sendJson(res, 400, { error: 'Missing alias' })
+          return
+        }
+        try {
+          writeCodexAuthForAlias(body.alias)
+          sendJson(res, 200, { ok: true })
+        } catch (err) {
+          sendJson(res, 400, { error: String(err) })
+        }
+        return
+      }
+
+      if (req.method === 'POST' && path === '/api/remove') {
+        const body = await readJsonBody(req)
+        if (!body.alias) {
+          sendJson(res, 400, { error: 'Missing alias' })
+          return
+        }
+        removeAccount(body.alias)
+        sendJson(res, 200, { ok: true })
+        return
+      }
+
+      if (req.method === 'POST' && path === '/api/account/meta') {
+        const body = await readJsonBody(req)
+        if (!body.alias) {
+          sendJson(res, 400, { error: 'Missing alias' })
+          return
+        }
+        const tags =
+          typeof body.tags === 'string'
+            ? body.tags
+                .split(',')
+                .map((tag: string) => tag.trim().toLowerCase())
+                .filter(Boolean)
+            : []
+        const uniqueTags = Array.from(new Set(tags))
+        const notes = typeof body.notes === 'string' ? body.notes.trim() : ''
+        updateAccount(body.alias, {
+          tags: uniqueTags.length > 0 ? uniqueTags : undefined,
+          notes: notes || undefined
+        })
+        sendJson(res, 200, { ok: true })
+        return
+      }
+
+      if (req.method === 'POST' && path === '/api/token/refresh') {
+        const body = await readJsonBody(req)
+        const store = loadStore()
+        const candidates = Object.values(store.accounts)
+        const alias = typeof body.alias === 'string' ? body.alias : undefined
+        const targets = alias ? candidates.filter((acc) => acc.alias === alias) : candidates
+        if (alias && targets.length === 0) {
+          sendJson(res, 400, { error: 'Unknown alias' })
+          return
+        }
+        const deviceAlias = resolveAliasForCurrentAuth(store)
+
+        const results: Array<{ alias: string; updated: boolean; error?: string }> = []
+        for (const account of targets) {
+          if (!account.refreshToken) {
+            results.push({ alias: account.alias, updated: false, error: 'No refresh token' })
             continue
           }
+          const refreshed = await refreshToken(account.alias)
+          if (!refreshed) {
+            results.push({ alias: account.alias, updated: false, error: 'Token refresh failed' })
+            continue
+          }
+
+          if (deviceAlias === account.alias) {
+            try {
+              writeCodexAuthForAlias(account.alias)
+            } catch (err) {
+              results.push({
+                alias: account.alias,
+                updated: true,
+                error: `Refreshed, but failed to update auth.json: ${err}`
+              })
+              continue
+            }
+          }
+
+          results.push({ alias: account.alias, updated: true })
         }
 
-        results.push({ alias: account.alias, updated: true })
-      }
-
-      sendJson(res, 200, { ok: true, results })
-      return
-    }
-
-    if (req.method === 'POST' && path === '/api/limits/refresh') {
-      const body = await readJsonBody(req)
-      const accounts = listAccounts().filter((acc) => acc.refreshToken && acc.accessToken)
-      if (body.alias && !accounts.find((acc) => acc.alias === body.alias)) {
-        sendJson(res, 400, { error: 'Unknown alias' })
+        sendJson(res, 200, { ok: true, results })
         return
       }
-      const queue = startRefreshQueue(accounts, body.alias)
-      sendJson(res, 200, { ok: true, queue })
-      return
-    }
 
-    if (req.method === 'POST' && path === '/api/limits/stop') {
-      stopRefreshQueue()
-      sendJson(res, 200, { ok: true })
-      return
-    }
-
-    // Phase G: Antigravity endpoints - check feature flag
-    if (req.method === 'POST' && path === '/api/antigravity/refresh') {
-      // Check if antigravity feature is enabled
-      if (!isFeatureEnabled('antigravityEnabled')) {
-        sendJson(res, 403, { 
-          error: 'Antigravity feature is disabled', 
-          code: 'FEATURE_DISABLED',
-          feature: 'antigravity'
-        })
+      if (req.method === 'POST' && path === '/api/limits/refresh') {
+        const body = await readJsonBody(req)
+        const accounts = listAccounts().filter((acc) => acc.refreshToken && acc.accessToken)
+        if (body.alias && !accounts.find((acc) => acc.alias === body.alias)) {
+          sendJson(res, 400, { error: 'Unknown alias' })
+          return
+        }
+        const queue = startRefreshQueue(accounts, body.alias)
+        sendJson(res, 200, { ok: true, queue })
         return
       }
-      await refreshAntigravityQuota()
-      sendJson(res, 200, { ok: true, quota: antigravityQuotaState })
-      return
-    }
 
-    if (req.method === 'POST' && path === '/api/antigravity/refresh-all') {
-      // Check if antigravity feature is enabled
-      if (!isFeatureEnabled('antigravityEnabled')) {
-        sendJson(res, 403, { 
-          error: 'Antigravity feature is disabled', 
-          code: 'FEATURE_DISABLED',
-          feature: 'antigravity'
-        })
+      if (req.method === 'POST' && path === '/api/limits/stop') {
+        stopRefreshQueue()
+        sendJson(res, 200, { ok: true })
         return
       }
-      await refreshAntigravityQuotaAll()
-      sendJson(res, 200, { ok: true, quota: antigravityQuotaState })
-      return
-    }
 
-    // Phase D: Account Lifecycle API Endpoints
-    
-    // GET /api/accounts - List all accounts with metadata
-    if (req.method === 'GET' && path === '/api/accounts') {
-      const store = loadStore()
-      const accounts = Object.values(store.accounts).map(acc => ({
-        alias: acc.alias,
-        email: acc.email,
-        enabled: acc.enabled !== false, // Defaults to true
-        disabledAt: acc.disabledAt,
-        disabledBy: acc.disabledBy,
-        disableReason: acc.disableReason,
-        usageCount: acc.usageCount,
-        rateLimits: acc.rateLimits,
-        limitsConfidence: acc.limitsConfidence,
-        limitStatus: acc.limitStatus,
-        limitError: acc.limitError,
-        lastLimitProbeAt: acc.lastLimitProbeAt,
-        lastLimitErrorAt: acc.lastLimitErrorAt,
-        tags: acc.tags,
-        notes: acc.notes
-      }))
-      sendJson(res, 200, { accounts })
-      return
-    }
-
-    // PUT /api/accounts/:alias/enabled - Enable/disable an account
-    if (req.method === 'PUT' && path.startsWith('/api/accounts/') && path.endsWith('/enabled')) {
-      const aliasMatch = path.match(/^\/api\/accounts\/([^\/]+)\/enabled$/)
-      if (!aliasMatch) {
-        sendJson(res, 400, { error: 'Invalid path format' })
-        return
-      }
-      const alias = decodePathSegment(aliasMatch[1])
-      if (!alias) {
-        sendJson(res, 400, { error: 'Invalid alias encoding', code: 'INVALID_ALIAS' })
-        return
-      }
-      const store = loadStore()
-      
-      if (!store.accounts[alias]) {
-        sendJson(res, 404, { error: 'Unknown alias', code: 'ACCOUNT_NOT_FOUND' })
-        return
-      }
-      
-      const body = await readJsonBody(req)
-      const enabled = body.enabled === true
-      
-      // Phase D: Prevent disabling the last enabled account
-      if (!enabled) {
-        const enabledCount = Object.values(store.accounts).filter(
-          acc => acc.alias !== alias && acc.enabled !== false
-        ).length
-        if (enabledCount === 0) {
-          sendJson(res, 409, { 
-            error: 'Cannot disable the last enabled account', 
-            code: 'LAST_ACCOUNT' 
+      // Phase G: Antigravity endpoints - check feature flag
+      if (req.method === 'POST' && path === '/api/antigravity/refresh') {
+        // Check if antigravity feature is enabled
+        if (!isFeatureEnabled('antigravityEnabled')) {
+          sendJson(res, 403, {
+            error: 'Antigravity feature is disabled',
+            code: 'FEATURE_DISABLED',
+            feature: 'antigravity'
           })
           return
         }
-      }
-      
-      // Phase D: Double-submit protection - check if already in desired state
-      const currentEnabled = store.accounts[alias].enabled !== false
-      if (currentEnabled === enabled) {
-        sendJson(res, 409, { 
-          error: enabled ? 'Account is already enabled' : 'Account is already disabled',
-          code: 'ALREADY_IN_STATE'
-        })
+        await refreshAntigravityQuota()
+        sendJson(res, 200, { ok: true, quota: antigravityQuotaState })
         return
       }
-      
-      const updates: Partial<AccountCredentials> = { enabled }
-      if (!enabled) {
-        updates.disabledAt = Date.now()
-        updates.disabledBy = 'dashboard' // Could be expanded to track actor
-      } else {
-        // Clear disable metadata when enabling
-        updates.disabledAt = undefined
-        updates.disabledBy = undefined
-        updates.disableReason = undefined
-      }
-      
-      updateAccount(alias, updates)
-      logInfo(`Account ${alias} ${enabled ? 'enabled' : 'disabled'} via dashboard`)
-      sendJson(res, 200, { 
-        ok: true, 
-        alias,
-        enabled,
-        disabledAt: updates.disabledAt,
-        disabledBy: updates.disabledBy
-      })
-      return
-    }
 
-    // POST /api/accounts/:alias/reauth - Re-authenticate an account
-    if (req.method === 'POST' && path.startsWith('/api/accounts/') && path.endsWith('/reauth')) {
-      const aliasMatch = path.match(/^\/api\/accounts\/([^\/]+)\/reauth$/)
-      if (!aliasMatch) {
-        sendJson(res, 400, { error: 'Invalid path format' })
+      if (req.method === 'POST' && path === '/api/antigravity/refresh-all') {
+        // Check if antigravity feature is enabled
+        if (!isFeatureEnabled('antigravityEnabled')) {
+          sendJson(res, 403, {
+            error: 'Antigravity feature is disabled',
+            code: 'FEATURE_DISABLED',
+            feature: 'antigravity'
+          })
+          return
+        }
+        await refreshAntigravityQuotaAll()
+        sendJson(res, 200, { ok: true, quota: antigravityQuotaState })
         return
       }
-      const alias = decodePathSegment(aliasMatch[1])
-      if (!alias) {
-        sendJson(res, 400, { error: 'Invalid alias encoding', code: 'INVALID_ALIAS' })
+
+      // Phase D: Account Lifecycle API Endpoints
+
+      // GET /api/accounts - List all accounts with metadata
+      if (req.method === 'GET' && path === '/api/accounts') {
+        const store = loadStore()
+        const accounts = Object.values(store.accounts).map((acc) => ({
+          alias: acc.alias,
+          email: acc.email,
+          enabled: acc.enabled !== false, // Defaults to true
+          disabledAt: acc.disabledAt,
+          disabledBy: acc.disabledBy,
+          disableReason: acc.disableReason,
+          usageCount: acc.usageCount,
+          rateLimits: acc.rateLimits,
+          limitsConfidence: acc.limitsConfidence,
+          limitStatus: acc.limitStatus,
+          limitError: acc.limitError,
+          lastLimitProbeAt: acc.lastLimitProbeAt,
+          lastLimitErrorAt: acc.lastLimitErrorAt,
+          tags: acc.tags,
+          notes: acc.notes
+        }))
+        sendJson(res, 200, { accounts })
         return
       }
-      const store = loadStore()
-      
-      if (!store.accounts[alias]) {
-        sendJson(res, 404, { error: 'Unknown alias', code: 'ACCOUNT_NOT_FOUND' })
-        return
-      }
-      
-      // Phase D: Cannot re-auth a disabled account
-      if (store.accounts[alias].enabled === false) {
-        sendJson(res, 409, { 
-          error: 'Cannot re-authenticate a disabled account',
-          code: 'ACCOUNT_DISABLED'
-        })
-        return
-      }
-      
-      // Phase D: Only targeted alias credentials mutate
-      // Start OAuth flow for the specific alias
-      try {
+
+      // PUT /api/accounts/:alias/enabled - Enable/disable an account
+      if (req.method === 'PUT' && path.startsWith('/api/accounts/') && path.endsWith('/enabled')) {
+        const aliasMatch = path.match(/^\/api\/accounts\/([^\/]+)\/enabled$/)
+        if (!aliasMatch) {
+          sendJson(res, 400, { error: 'Invalid path format' })
+          return
+        }
+        const alias = decodePathSegment(aliasMatch[1])
+        if (!alias) {
+          sendJson(res, 400, { error: 'Invalid alias encoding', code: 'INVALID_ALIAS' })
+          return
+        }
+        const store = loadStore()
+
+        if (!store.accounts[alias]) {
+          sendJson(res, 404, { error: 'Unknown alias', code: 'ACCOUNT_NOT_FOUND' })
+          return
+        }
+
         const body = await readJsonBody(req)
-        const actor = body.actor || 'dashboard'
-        const result = await startManualLogin(alias)
-        logInfo(`Re-auth started for ${alias} by ${actor}`)
+        const enabled = body.enabled === true
+
+        // Phase D: Prevent disabling the last enabled account
+        if (!enabled) {
+          const enabledCount = Object.values(store.accounts).filter(
+            (acc) => acc.alias !== alias && acc.enabled !== false
+          ).length
+          if (enabledCount === 0) {
+            sendJson(res, 409, {
+              error: 'Cannot disable the last enabled account',
+              code: 'LAST_ACCOUNT'
+            })
+            return
+          }
+        }
+
+        // Phase D: Double-submit protection - check if already in desired state
+        const currentEnabled = store.accounts[alias].enabled !== false
+        if (currentEnabled === enabled) {
+          sendJson(res, 409, {
+            error: enabled ? 'Account is already enabled' : 'Account is already disabled',
+            code: 'ALREADY_IN_STATE'
+          })
+          return
+        }
+
+        const updates: Partial<AccountCredentials> = { enabled }
+        if (!enabled) {
+          updates.disabledAt = Date.now()
+          updates.disabledBy = 'dashboard' // Could be expanded to track actor
+        } else {
+          // Clear disable metadata when enabling
+          updates.disabledAt = undefined
+          updates.disabledBy = undefined
+          updates.disableReason = undefined
+        }
+
+        updateAccount(alias, updates)
+        logInfo(`Account ${alias} ${enabled ? 'enabled' : 'disabled'} via dashboard`)
         sendJson(res, 200, {
-          ...result,
+          ok: true,
           alias,
-          message: 'OAuth flow started. Complete authentication in the browser.'
+          enabled,
+          disabledAt: updates.disabledAt,
+          disabledBy: updates.disabledBy
         })
-      } catch (err) {
-        sendJson(res, 500, { error: String(err), code: 'AUTH_FLOW_ERROR' })
-      }
-      return
-    }
-
-    // Phase E: Force Mode API endpoints
-    // GET /api/force - Get current force state
-    if (req.method === 'GET' && path === '/api/force') {
-      const forceState = getForceState()
-      const active = isForceActive()
-      const remainingMs = getRemainingForceTimeMs()
-      
-      sendJson(res, 200, {
-        active,
-        alias: forceState.forcedAlias,
-        forcedAt: forceState.forcedAlias && forceState.forcedUntil 
-          ? forceState.forcedUntil - (24 * 60 * 60 * 1000) 
-          : null,
-        forcedUntil: forceState.forcedUntil,
-        forcedBy: forceState.forcedBy,
-        remainingMs,
-        remainingTime: formatForceDuration(remainingMs),
-        previousRotationStrategy: forceState.previousRotationStrategy
-      })
-      return
-    }
-
-    // POST /api/force - Activate force mode for an alias
-    if (req.method === 'POST' && path === '/api/force') {
-      const body = await readJsonBody(req)
-      const alias = typeof body.alias === 'string' ? body.alias.trim() : ''
-      const actor = typeof body.actor === 'string' ? body.actor.trim() : 'api'
-      
-      if (!alias) {
-        sendJson(res, 400, { error: 'Missing alias', code: 'MISSING_ALIAS' })
         return
       }
-      
-      const result = activateForce(alias, actor)
-      
-      if (!result.success) {
-        const statusCode = result.error?.includes('not found') ? 404 
-          : result.error?.includes('disabled') ? 409 
-          : 400
-        sendJson(res, statusCode, { error: result.error, code: 'FORCE_FAILED' })
+
+      // POST /api/accounts/:alias/reauth - Re-authenticate an account
+      if (req.method === 'POST' && path.startsWith('/api/accounts/') && path.endsWith('/reauth')) {
+        const aliasMatch = path.match(/^\/api\/accounts\/([^\/]+)\/reauth$/)
+        if (!aliasMatch) {
+          sendJson(res, 400, { error: 'Invalid path format' })
+          return
+        }
+        const alias = decodePathSegment(aliasMatch[1])
+        if (!alias) {
+          sendJson(res, 400, { error: 'Invalid alias encoding', code: 'INVALID_ALIAS' })
+          return
+        }
+        const store = loadStore()
+
+        if (!store.accounts[alias]) {
+          sendJson(res, 404, { error: 'Unknown alias', code: 'ACCOUNT_NOT_FOUND' })
+          return
+        }
+
+        // Phase D: Cannot re-auth a disabled account
+        if (store.accounts[alias].enabled === false) {
+          sendJson(res, 409, {
+            error: 'Cannot re-authenticate a disabled account',
+            code: 'ACCOUNT_DISABLED'
+          })
+          return
+        }
+
+        // Phase D: Only targeted alias credentials mutate
+        // Start OAuth flow for the specific alias
+        try {
+          const body = await readJsonBody(req)
+          const actor = body.actor || 'dashboard'
+          const result = await startManualLogin(alias)
+          logInfo(`Re-auth started for ${alias} by ${actor}`)
+          sendJson(res, 200, {
+            ...result,
+            alias,
+            message: 'OAuth flow started. Complete authentication in the browser.'
+          })
+        } catch (err) {
+          sendJson(res, 500, { error: String(err), code: 'AUTH_FLOW_ERROR' })
+        }
         return
       }
-      
-      logInfo(`Force mode activated for ${alias} by ${actor}`)
-      sendJson(res, 200, {
-        ok: true,
-        alias,
-        forcedUntil: result.state?.forcedUntil,
-        remainingMs: result.state?.forcedUntil ? result.state.forcedUntil - Date.now() : 0,
-        remainingTime: result.state?.forcedUntil 
-          ? formatForceDuration(result.state.forcedUntil - Date.now()) 
-          : '0m',
-        previousRotationStrategy: result.state?.previousRotationStrategy
-      })
-      return
-    }
 
-    // POST /api/force/clear - Deactivate force mode
-    if (req.method === 'POST' && path === '/api/force/clear') {
-      const result = clearForce()
-      
-      if (result.success) {
-        logInfo('Force mode cleared')
+      // Phase E: Force Mode API endpoints
+      // GET /api/force - Get current force state
+      if (req.method === 'GET' && path === '/api/force') {
+        const forceState = getForceState()
+        const active = isForceActive()
+        const remainingMs = getRemainingForceTimeMs()
+
+        sendJson(res, 200, {
+          active,
+          alias: forceState.forcedAlias,
+          forcedAt:
+            forceState.forcedAlias && forceState.forcedUntil
+              ? forceState.forcedUntil - 24 * 60 * 60 * 1000
+              : null,
+          forcedUntil: forceState.forcedUntil,
+          forcedBy: forceState.forcedBy,
+          remainingMs,
+          remainingTime: formatForceDuration(remainingMs),
+          previousRotationStrategy: forceState.previousRotationStrategy
+        })
+        return
+      }
+
+      // POST /api/force - Activate force mode for an alias
+      if (req.method === 'POST' && path === '/api/force') {
+        const body = await readJsonBody(req)
+        const alias = typeof body.alias === 'string' ? body.alias.trim() : ''
+        const actor = typeof body.actor === 'string' ? body.actor.trim() : 'api'
+
+        if (!alias) {
+          sendJson(res, 400, { error: 'Missing alias', code: 'MISSING_ALIAS' })
+          return
+        }
+
+        const result = activateForce(alias, actor)
+
+        if (!result.success) {
+          const statusCode = result.error?.includes('not found')
+            ? 404
+            : result.error?.includes('disabled')
+              ? 409
+              : 400
+          sendJson(res, statusCode, { error: result.error, code: 'FORCE_FAILED' })
+          return
+        }
+
+        logInfo(`Force mode activated for ${alias} by ${actor}`)
         sendJson(res, 200, {
           ok: true,
-          restoredStrategy: result.restoredStrategy
+          alias,
+          forcedUntil: result.state?.forcedUntil,
+          remainingMs: result.state?.forcedUntil ? result.state.forcedUntil - Date.now() : 0,
+          remainingTime: result.state?.forcedUntil
+            ? formatForceDuration(result.state.forcedUntil - Date.now())
+            : '0m',
+          previousRotationStrategy: result.state?.previousRotationStrategy
         })
-      } else {
-        sendJson(res, 500, { error: 'Failed to clear force mode', code: 'CLEAR_FAILED' })
+        return
       }
-      return
-    }
 
-    // Phase F: Settings API Endpoints
-    
-    // GET /api/settings - Get current settings
-    if (req.method === 'GET' && path === '/api/settings') {
-      const { getSettingsWithInfo } = await import('./settings.js')
-      const info = getSettingsWithInfo()
-      sendJson(res, 200, {
-        settings: info.settings,
-        source: info.source,
-        preset: info.preset,
-        canReset: info.canReset
-      })
-      return
-    }
-    
-    // PUT /api/settings - Update settings
-    if (req.method === 'PUT' && path === '/api/settings') {
-      const body = await readJsonBody(req)
-      const { updateSettings } = await import('./settings.js')
-      
-      const actor = body.actor || 'dashboard'
-      const updates: Partial<RotationSettings> = {}
-      
-      if (body.rotationStrategy) {
-        updates.rotationStrategy = body.rotationStrategy
-      }
-      if (typeof body.criticalThreshold === 'number') {
-        updates.criticalThreshold = body.criticalThreshold
-      }
-      if (typeof body.lowThreshold === 'number') {
-        updates.lowThreshold = body.lowThreshold
-      }
-      if (body.accountWeights) {
-        updates.accountWeights = body.accountWeights
-      }
-      
-      // Phase G: Handle feature flags
-      if (body.featureFlags && typeof body.featureFlags === 'object') {
-        updates.featureFlags = body.featureFlags
-      }
-      
-      const result = updateSettings(updates, actor)
-      
-      if (result.success) {
-        sendJson(res, 200, {
-          ok: true,
-          settings: result.settings
-        })
-      } else {
-        sendJson(res, 400, {
-          error: 'Validation failed',
-          code: 'VALIDATION_ERROR',
-          details: result.errors
-        })
-      }
-      return
-    }
-    
-    // Phase G: GET /api/settings/feature-flags - Get feature flags
-    if (req.method === 'GET' && path === '/api/settings/feature-flags') {
-      const settings = getSettings()
-      sendJson(res, 200, {
-        featureFlags: settings.settings.featureFlags || { antigravityEnabled: false }
-      })
-      return
-    }
-    
-    // Phase G: PUT /api/settings/feature-flags - Update feature flags
-    if (req.method === 'PUT' && path === '/api/settings/feature-flags') {
-      const body = await readJsonBody(req)
-      const { updateSettings } = await import('./settings.js')
-      
-      const actor = body.actor || 'dashboard'
-      const updates: Partial<RotationSettings> = {}
-      
-      if (body.featureFlags && typeof body.featureFlags === 'object') {
-        updates.featureFlags = body.featureFlags
-        
-        const result = updateSettings(updates, actor)
-        
-        if (result.success && result.settings) {
-          logInfo(`Feature flags updated by ${actor}: ${JSON.stringify(body.featureFlags)}`)
+      // POST /api/force/clear - Deactivate force mode
+      if (req.method === 'POST' && path === '/api/force/clear') {
+        const result = clearForce()
+
+        if (result.success) {
+          logInfo('Force mode cleared')
           sendJson(res, 200, {
             ok: true,
-            featureFlags: result.settings.featureFlags || { antigravityEnabled: false }
+            restoredStrategy: result.restoredStrategy
+          })
+        } else {
+          sendJson(res, 500, { error: 'Failed to clear force mode', code: 'CLEAR_FAILED' })
+        }
+        return
+      }
+
+      // Phase F: Settings API Endpoints
+
+      // GET /api/settings - Get current settings
+      if (req.method === 'GET' && path === '/api/settings') {
+        const { getSettingsWithInfo } = await import('./settings.js')
+        const info = getSettingsWithInfo()
+        sendJson(res, 200, {
+          settings: info.settings,
+          source: info.source,
+          preset: info.preset,
+          canReset: info.canReset
+        })
+        return
+      }
+
+      // PUT /api/settings - Update settings
+      if (req.method === 'PUT' && path === '/api/settings') {
+        const body = await readJsonBody(req)
+        const { updateSettings } = await import('./settings.js')
+
+        const actor = body.actor || 'dashboard'
+        const updates: Partial<RotationSettings> = {}
+
+        if (body.rotationStrategy) {
+          updates.rotationStrategy = body.rotationStrategy
+        }
+        if (typeof body.criticalThreshold === 'number') {
+          updates.criticalThreshold = body.criticalThreshold
+        }
+        if (typeof body.lowThreshold === 'number') {
+          updates.lowThreshold = body.lowThreshold
+        }
+        if (body.accountWeights) {
+          updates.accountWeights = body.accountWeights
+        }
+
+        // Phase G: Handle feature flags
+        if (body.featureFlags && typeof body.featureFlags === 'object') {
+          updates.featureFlags = body.featureFlags
+        }
+
+        const result = updateSettings(updates, actor)
+
+        if (result.success) {
+          sendJson(res, 200, {
+            ok: true,
+            settings: result.settings
           })
         } else {
           sendJson(res, 400, {
@@ -1772,62 +1854,100 @@ export function startWebConsole(options?: { port?: number; host?: string }): htt
             details: result.errors
           })
         }
-      } else {
-        sendJson(res, 400, {
-          error: 'Invalid feature flags',
-          code: 'INVALID_FEATURE_FLAGS'
-        })
+        return
       }
-      return
-    }
-    
-    // POST /api/settings/reset - Reset to defaults
-    if (req.method === 'POST' && path === '/api/settings/reset') {
-      const { resetSettings } = await import('./settings.js')
-      const body = await readJsonBody(req)
-      const actor = body.actor || 'dashboard'
-      
-      const settings = resetSettings(actor)
-      sendJson(res, 200, {
-        ok: true,
-        settings
-      })
-      return
-    }
-    
-    // POST /api/settings/preset - Apply a preset
-    if (req.method === 'POST' && path === '/api/settings/preset') {
-      const body = await readJsonBody(req)
-      const { applyPreset } = await import('./settings.js')
-      
-      const preset = body.preset
-      if (!preset || !['balanced', 'conservative', 'aggressive', 'custom'].includes(preset)) {
-        sendJson(res, 400, {
-          error: 'Invalid preset',
-          code: 'INVALID_PRESET',
-          validPresets: ['balanced', 'conservative', 'aggressive', 'custom']
+
+      // Phase G: GET /api/settings/feature-flags - Get feature flags
+      if (req.method === 'GET' && path === '/api/settings/feature-flags') {
+        const settings = getSettings()
+        sendJson(res, 200, {
+          featureFlags: settings.settings.featureFlags || { antigravityEnabled: false }
         })
         return
       }
-      
-      const actor = body.actor || 'dashboard'
-      const result = applyPreset(preset as WeightPreset, actor)
-      
-      if (result.success) {
+
+      // Phase G: PUT /api/settings/feature-flags - Update feature flags
+      if (req.method === 'PUT' && path === '/api/settings/feature-flags') {
+        const body = await readJsonBody(req)
+        const { updateSettings } = await import('./settings.js')
+
+        const actor = body.actor || 'dashboard'
+        const updates: Partial<RotationSettings> = {}
+
+        if (body.featureFlags && typeof body.featureFlags === 'object') {
+          updates.featureFlags = body.featureFlags
+
+          const result = updateSettings(updates, actor)
+
+          if (result.success && result.settings) {
+            logInfo(`Feature flags updated by ${actor}: ${JSON.stringify(body.featureFlags)}`)
+            sendJson(res, 200, {
+              ok: true,
+              featureFlags: result.settings.featureFlags || { antigravityEnabled: false }
+            })
+          } else {
+            sendJson(res, 400, {
+              error: 'Validation failed',
+              code: 'VALIDATION_ERROR',
+              details: result.errors
+            })
+          }
+        } else {
+          sendJson(res, 400, {
+            error: 'Invalid feature flags',
+            code: 'INVALID_FEATURE_FLAGS'
+          })
+        }
+        return
+      }
+
+      // POST /api/settings/reset - Reset to defaults
+      if (req.method === 'POST' && path === '/api/settings/reset') {
+        const { resetSettings } = await import('./settings.js')
+        const body = await readJsonBody(req)
+        const actor = body.actor || 'dashboard'
+
+        const settings = resetSettings(actor)
         sendJson(res, 200, {
           ok: true,
-          preset,
-          settings: result.settings
+          settings
         })
-      } else {
-        sendJson(res, 400, {
-          error: 'Failed to apply preset',
-          code: 'PRESET_ERROR',
-          details: result.errors
-        })
+        return
       }
-      return
-    }
+
+      // POST /api/settings/preset - Apply a preset
+      if (req.method === 'POST' && path === '/api/settings/preset') {
+        const body = await readJsonBody(req)
+        const { applyPreset } = await import('./settings.js')
+
+        const preset = body.preset
+        if (!preset || !['balanced', 'conservative', 'aggressive', 'custom'].includes(preset)) {
+          sendJson(res, 400, {
+            error: 'Invalid preset',
+            code: 'INVALID_PRESET',
+            validPresets: ['balanced', 'conservative', 'aggressive', 'custom']
+          })
+          return
+        }
+
+        const actor = body.actor || 'dashboard'
+        const result = applyPreset(preset as WeightPreset, actor)
+
+        if (result.success) {
+          sendJson(res, 200, {
+            ok: true,
+            preset,
+            settings: result.settings
+          })
+        } else {
+          sendJson(res, 400, {
+            error: 'Failed to apply preset',
+            code: 'PRESET_ERROR',
+            details: result.errors
+          })
+        }
+        return
+      }
 
       res.writeHead(404, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ error: 'Not found' }))

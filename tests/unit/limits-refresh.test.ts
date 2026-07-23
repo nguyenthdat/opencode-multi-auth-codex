@@ -78,11 +78,9 @@ describe('refreshRateLimitsForAccount', () => {
 
     expect(probeRateLimitsForAccount).not.toHaveBeenCalled()
     expect(markAuthInvalid).not.toHaveBeenCalled()
-    expect(markWorkspaceDeactivated).toHaveBeenCalledWith(
-      'workspace-dead',
-      30 * 60 * 1000,
-      { error: 'deactivated_workspace' }
-    )
+    expect(markWorkspaceDeactivated).toHaveBeenCalledWith('workspace-dead', 30 * 60 * 1000, {
+      error: 'deactivated_workspace'
+    })
     expect(result).toEqual({
       alias: 'workspace-dead',
       updated: false,

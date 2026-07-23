@@ -501,25 +501,24 @@ export function saveAuthenticatedAccount(alias, creds, existingEmailPolicy = 'al
     if (existingEmailPolicy === 'reject' && store.accounts[alias]) {
         throw new Error(`Account alias already exists: ${alias}`);
     }
-    const targetAlias = existingEmailPolicy === 'update' && emailMatch
-        ? emailMatch.alias
-        : alias;
+    const targetAlias = existingEmailPolicy === 'update' && emailMatch ? emailMatch.alias : alias;
     const existing = store.accounts[targetAlias];
     const entry = buildHistoryEntry(creds.rateLimits);
-    store.accounts[targetAlias] = existing && existingEmailPolicy === 'update'
-        ? {
-            ...existing,
-            ...creds,
-            alias: targetAlias,
-            usageCount: existing.usageCount,
-            rateLimitHistory: existing.rateLimitHistory
-        }
-        : {
-            ...creds,
-            alias: targetAlias,
-            usageCount: 0,
-            rateLimitHistory: entry ? [entry] : creds.rateLimitHistory
-        };
+    store.accounts[targetAlias] =
+        existing && existingEmailPolicy === 'update'
+            ? {
+                ...existing,
+                ...creds,
+                alias: targetAlias,
+                usageCount: existing.usageCount,
+                rateLimitHistory: existing.rateLimitHistory
+            }
+            : {
+                ...creds,
+                alias: targetAlias,
+                usageCount: 0,
+                rateLimitHistory: entry ? [entry] : creds.rateLimitHistory
+            };
     if (!store.activeAlias) {
         store.activeAlias = targetAlias;
     }

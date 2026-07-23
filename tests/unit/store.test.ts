@@ -1,9 +1,9 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import * as os from 'os'
-import { 
-  loadStore, 
-  saveStore, 
+import {
+  loadStore,
+  saveStore,
   getStoreDiagnostics,
   withWriteLock,
   addAccount,
@@ -73,12 +73,18 @@ describe('Store Operations', () => {
       email: 'Existing@Example.com'
     })
 
-    expect(() => saveAuthenticatedAccount('new-alias', {
-      accessToken: 'new-access-token',
-      refreshToken: 'new-refresh-token',
-      expiresAt: Date.now() + 7200000,
-      email: 'existing@example.com'
-    }, 'reject')).toThrow(AccountEmailExistsError)
+    expect(() =>
+      saveAuthenticatedAccount(
+        'new-alias',
+        {
+          accessToken: 'new-access-token',
+          refreshToken: 'new-refresh-token',
+          expiresAt: Date.now() + 7200000,
+          email: 'existing@example.com'
+        },
+        'reject'
+      )
+    ).toThrow(AccountEmailExistsError)
 
     const reloaded = loadStore()
     expect(reloaded.accounts['new-alias']).toBeUndefined()
@@ -100,14 +106,18 @@ describe('Store Operations', () => {
       rateLimitedUntil: Date.now() + 60_000
     })
 
-    const updated = saveAuthenticatedAccount('different-alias', {
-      accessToken: 'new-access-token',
-      refreshToken: 'new-refresh-token',
-      expiresAt: Date.now() + 7200000,
-      email: 'EXISTING@example.com',
-      authInvalid: false,
-      authInvalidatedAt: undefined
-    }, 'update')
+    const updated = saveAuthenticatedAccount(
+      'different-alias',
+      {
+        accessToken: 'new-access-token',
+        refreshToken: 'new-refresh-token',
+        expiresAt: Date.now() + 7200000,
+        email: 'EXISTING@example.com',
+        authInvalid: false,
+        authInvalidatedAt: undefined
+      },
+      'update'
+    )
 
     expect(updated.accounts['different-alias']).toBeUndefined()
     expect(updated.accounts.existing.accessToken).toBe('new-access-token')
@@ -126,12 +136,19 @@ describe('Store Operations', () => {
       email: 'selected@example.com'
     })
 
-    expect(() => saveAuthenticatedAccount('selected', {
-      accessToken: 'different-access-token',
-      refreshToken: 'different-refresh-token',
-      expiresAt: Date.now() + 7200000,
-      email: 'different@example.com'
-    }, 'update', 'selected@example.com')).toThrow(AccountEmailMismatchError)
+    expect(() =>
+      saveAuthenticatedAccount(
+        'selected',
+        {
+          accessToken: 'different-access-token',
+          refreshToken: 'different-refresh-token',
+          expiresAt: Date.now() + 7200000,
+          email: 'different@example.com'
+        },
+        'update',
+        'selected@example.com'
+      )
+    ).toThrow(AccountEmailMismatchError)
 
     const reloaded = loadStore()
     expect(reloaded.accounts.selected.email).toBe('selected@example.com')
@@ -222,7 +239,7 @@ describe('Write Lock', () => {
     } catch (e) {
       // expected
     }
-    
+
     const result = await withWriteLock(() => 'after error')
     expect(result).toBe('after error')
   })

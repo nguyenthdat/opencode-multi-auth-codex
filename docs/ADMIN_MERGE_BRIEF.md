@@ -25,6 +25,7 @@ This update hardens account rotation behavior and dashboard controls for multi-a
 ## Key behavior changes
 
 1. Limit sleep until reset
+
 - On `429`, code computes `rateLimitedUntil` from:
   - `Retry-After`
   - known rate-limit window reset times
@@ -33,16 +34,19 @@ This update hardens account rotation behavior and dashboard controls for multi-a
 - Rotator excludes any account with `rateLimitedUntil > now`.
 
 2. Force Mode strict pinning
+
 - When Force Mode is active, requests only target the forced alias.
 - If forced alias is blocked (for example rate-limited), request fails with deterministic error instead of falling back.
 - Force state auto-clears only on expiry/removal/disabled account, not transient ineligibility.
 
 3. Runtime strategy reliability
+
 - Rotation reads runtime settings used by dashboard persistence.
 - Strategy updates from `/api/settings` apply to selection logic immediately.
 - Legacy strategy field is kept in sync for compatibility with force-state restore.
 
 4. Dashboard UX improvements
+
 - Strategy selector appears next to Force Mode.
 - Hover/mouseover help explains each strategy and Force Mode interaction.
 - Weighted round-robin tooltip now explains percentage behavior with example and skip rules.
@@ -64,11 +68,13 @@ npm run build
 ```
 
 Latest observed results:
+
 - `lint`: pass
 - `test:unit`: pass (9 suites, 125 tests)
 - `build`: pass
 
 Live checks performed against local dashboard (`127.0.0.1:3434`):
+
 - Strategy toggle reflected in `/api/state` and restored successfully.
 - New tooltip strings confirmed in served `dist/web.js`.
 

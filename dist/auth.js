@@ -140,7 +140,9 @@ export async function loginAccount(alias, flow, options) {
                 const now = Date.now();
                 const accessClaims = decodeJwtPayload(tokens.access_token);
                 const idClaims = tokens.id_token ? decodeJwtPayload(tokens.id_token) : null;
-                const expiresAt = getExpiryFromClaims(accessClaims) || getExpiryFromClaims(idClaims) || now + tokens.expires_in * 1000;
+                const expiresAt = getExpiryFromClaims(accessClaims) ||
+                    getExpiryFromClaims(idClaims) ||
+                    now + tokens.expires_in * 1000;
                 let email = getEmailFromClaims(idClaims) || getEmailFromClaims(accessClaims);
                 try {
                     const userRes = await fetch(`${OPENAI_ISSUER}/userinfo`, {
@@ -154,10 +156,8 @@ export async function loginAccount(alias, flow, options) {
                 catch {
                     /* user info fetch is non-critical */
                 }
-                const accountId = getAccountIdFromClaims(idClaims) ||
-                    getAccountIdFromClaims(accessClaims);
-                const planType = getPlanTypeFromClaims(idClaims) ||
-                    getPlanTypeFromClaims(accessClaims);
+                const accountId = getAccountIdFromClaims(idClaims) || getAccountIdFromClaims(accessClaims);
+                const planType = getPlanTypeFromClaims(idClaims) || getPlanTypeFromClaims(accessClaims);
                 const store = await withWriteLock(() => saveAuthenticatedAccount(alias, {
                     accessToken: tokens.access_token,
                     refreshToken,
@@ -250,7 +250,9 @@ export async function refreshToken(alias) {
         const tokens = (await tokenRes.json());
         const accessClaims = decodeJwtPayload(tokens.access_token);
         const idClaims = tokens.id_token ? decodeJwtPayload(tokens.id_token) : null;
-        const expiresAt = getExpiryFromClaims(accessClaims) || getExpiryFromClaims(idClaims) || Date.now() + tokens.expires_in * 1000;
+        const expiresAt = getExpiryFromClaims(accessClaims) ||
+            getExpiryFromClaims(idClaims) ||
+            Date.now() + tokens.expires_in * 1000;
         const updates = {
             accessToken: tokens.access_token,
             refreshToken: tokens.refresh_token || account.refreshToken,
@@ -260,9 +262,7 @@ export async function refreshToken(alias) {
             accountId: getAccountIdFromClaims(idClaims) ||
                 getAccountIdFromClaims(accessClaims) ||
                 account.accountId,
-            planType: getPlanTypeFromClaims(idClaims) ||
-                getPlanTypeFromClaims(accessClaims) ||
-                account.planType
+            planType: getPlanTypeFromClaims(idClaims) || getPlanTypeFromClaims(accessClaims) || account.planType
         };
         const updatedStore = updateAccount(alias, updates);
         clearAuthInvalid(alias);

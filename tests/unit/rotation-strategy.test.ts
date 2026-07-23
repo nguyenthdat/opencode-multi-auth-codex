@@ -21,7 +21,11 @@ function createAccount(alias: string, usageCount: number): AccountCredentials {
   }
 }
 
-function createPlanAccount(alias: string, usageCount: number, planType: string): AccountCredentials {
+function createPlanAccount(
+  alias: string,
+  usageCount: number,
+  planType: string
+): AccountCredentials {
   return {
     ...createAccount(alias, usageCount),
     planType

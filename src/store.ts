@@ -157,22 +157,31 @@ function validateAccount(acc: any, alias: string): AccountCredentials | null {
     lastUsed: typeof acc.lastUsed === 'number' ? acc.lastUsed : undefined,
     usageCount: typeof acc.usageCount === 'number' ? acc.usageCount : 0,
     rateLimitedUntil: typeof acc.rateLimitedUntil === 'number' ? acc.rateLimitedUntil : undefined,
-    modelUnsupportedUntil: typeof acc.modelUnsupportedUntil === 'number' ? acc.modelUnsupportedUntil : undefined,
-    modelUnsupportedAt: typeof acc.modelUnsupportedAt === 'number' ? acc.modelUnsupportedAt : undefined,
-    modelUnsupportedModel: typeof acc.modelUnsupportedModel === 'string' ? acc.modelUnsupportedModel : undefined,
-    modelUnsupportedError: typeof acc.modelUnsupportedError === 'string' ? acc.modelUnsupportedError : undefined,
-    workspaceDeactivatedUntil: typeof acc.workspaceDeactivatedUntil === 'number' ? acc.workspaceDeactivatedUntil : undefined,
-    workspaceDeactivatedAt: typeof acc.workspaceDeactivatedAt === 'number' ? acc.workspaceDeactivatedAt : undefined,
-    workspaceDeactivatedError: typeof acc.workspaceDeactivatedError === 'string' ? acc.workspaceDeactivatedError : undefined,
+    modelUnsupportedUntil:
+      typeof acc.modelUnsupportedUntil === 'number' ? acc.modelUnsupportedUntil : undefined,
+    modelUnsupportedAt:
+      typeof acc.modelUnsupportedAt === 'number' ? acc.modelUnsupportedAt : undefined,
+    modelUnsupportedModel:
+      typeof acc.modelUnsupportedModel === 'string' ? acc.modelUnsupportedModel : undefined,
+    modelUnsupportedError:
+      typeof acc.modelUnsupportedError === 'string' ? acc.modelUnsupportedError : undefined,
+    workspaceDeactivatedUntil:
+      typeof acc.workspaceDeactivatedUntil === 'number' ? acc.workspaceDeactivatedUntil : undefined,
+    workspaceDeactivatedAt:
+      typeof acc.workspaceDeactivatedAt === 'number' ? acc.workspaceDeactivatedAt : undefined,
+    workspaceDeactivatedError:
+      typeof acc.workspaceDeactivatedError === 'string' ? acc.workspaceDeactivatedError : undefined,
     authInvalid: typeof acc.authInvalid === 'boolean' ? acc.authInvalid : undefined,
-    authInvalidatedAt: typeof acc.authInvalidatedAt === 'number' ? acc.authInvalidatedAt : undefined,
+    authInvalidatedAt:
+      typeof acc.authInvalidatedAt === 'number' ? acc.authInvalidatedAt : undefined,
     // Phase D: Account availability fields
     enabled: typeof acc.enabled === 'boolean' ? acc.enabled : undefined,
     disabledAt: typeof acc.disabledAt === 'number' ? acc.disabledAt : undefined,
     disabledBy: typeof acc.disabledBy === 'string' ? acc.disabledBy : undefined,
     disableReason: typeof acc.disableReason === 'string' ? acc.disableReason : undefined,
     rateLimits,
-    rateLimitHistory: rateLimitHistory && rateLimitHistory.length > 0 ? rateLimitHistory : undefined,
+    rateLimitHistory:
+      rateLimitHistory && rateLimitHistory.length > 0 ? rateLimitHistory : undefined,
     limitStatus: typeof acc.limitStatus === 'string' ? acc.limitStatus : undefined,
     limitError: typeof acc.limitError === 'string' ? acc.limitError : undefined,
     lastLimitProbeAt: typeof acc.lastLimitProbeAt === 'number' ? acc.lastLimitProbeAt : undefined,
@@ -192,7 +201,7 @@ function validateAccount(acc: any, alias: string): AccountCredentials | null {
 
 function validateStore(data: any): AccountStore | null {
   if (!data || typeof data !== 'object') return null
-  
+
   const accounts: Record<string, AccountCredentials> = {}
   const rawAccounts = data.accounts
   if (rawAccounts && typeof rawAccounts === 'object') {
@@ -203,7 +212,7 @@ function validateStore(data: any): AccountStore | null {
       }
     }
   }
-  
+
   return {
     version: typeof data.version === 'number' ? data.version : undefined,
     accounts,
@@ -239,20 +248,22 @@ function migrateV1toV2(data: StoreFileV1): StoreFileV2 {
 
 function migrateStore(data: any): AccountStore | null {
   if (!data || typeof data !== 'object') return null
-  
+
   const version = typeof data.version === 'number' ? data.version : 1
-  
+
   if (version > CURRENT_STORE_VERSION) {
-    console.warn(`[multi-auth] Store version ${version} is newer than supported ${CURRENT_STORE_VERSION}. Proceeding with caution.`)
+    console.warn(
+      `[multi-auth] Store version ${version} is newer than supported ${CURRENT_STORE_VERSION}. Proceeding with caution.`
+    )
     return validateStore(data)
   }
-  
+
   let migrated: any = data
   if (version === 1) {
     migrated = migrateV1toV2(data as StoreFileV1)
     console.log('[multi-auth] Migrated store from v1 to v2')
   }
-  
+
   return validateStore(migrated)
 }
 
@@ -305,7 +316,11 @@ function releaseWriteLock(): void {
   }
 }
 
-function buildSnapshot(window?: { remaining?: number; limit?: number; resetAt?: number }): RateLimitSnapshot | undefined {
+function buildSnapshot(window?: {
+  remaining?: number
+  limit?: number
+  resetAt?: number
+}): RateLimitSnapshot | undefined {
   if (!window) return undefined
   return {
     remaining: window.remaining,
@@ -314,7 +329,10 @@ function buildSnapshot(window?: { remaining?: number; limit?: number; resetAt?: 
   }
 }
 
-function buildHistoryEntry(rateLimits?: { fiveHour?: any; weekly?: any }): RateLimitHistoryEntry | null {
+function buildHistoryEntry(rateLimits?: {
+  fiveHour?: any
+  weekly?: any
+}): RateLimitHistoryEntry | null {
   if (!hasMeaningfulRateLimits(rateLimits)) return null
   const updatedAtValues = [rateLimits?.fiveHour?.updatedAt, rateLimits?.weekly?.updatedAt].filter(
     (value): value is number => typeof value === 'number'
@@ -388,17 +406,17 @@ export function loadStore(): AccountStore {
           return emptyStore()
         }
       }
-      
+
       const migrated = migrateStore(parsed)
       if (migrated) {
         saveLastKnownGood(migrated)
         return migrated
       }
-      
+
       storeLocked = true
       lastStoreError = 'Store validation failed.'
       console.error('[multi-auth] Store validation failed')
-      
+
       const lkg = loadLastKnownGood()
       if (lkg) {
         console.warn('[multi-auth] Restored from last-known-good snapshot')
@@ -409,7 +427,7 @@ export function loadStore(): AccountStore {
       storeLocked = true
       lastStoreError = 'Failed to parse store. Store locked until fixed.'
       console.error('[multi-auth] Failed to parse store:', err)
-      
+
       const lkg = loadLastKnownGood()
       if (lkg) {
         console.warn('[multi-auth] Restored from last-known-good snapshot')
@@ -528,8 +546,10 @@ export function getStoreDiagnostics(): {
   }
 }
 
-
-export function addAccount(alias: string, creds: Omit<AccountCredentials, 'alias' | 'usageCount'>): AccountStore {
+export function addAccount(
+  alias: string,
+  creds: Omit<AccountCredentials, 'alias' | 'usageCount'>
+): AccountStore {
   const store = loadStore()
   const entry = buildHistoryEntry(creds.rateLimits)
   store.accounts[alias] = {
@@ -578,7 +598,9 @@ export function saveAuthenticatedAccount(
     throw new AccountEmailMismatchError()
   }
   const emailMatch = normalizedEmail
-    ? Object.values(store.accounts).find((account) => account.email?.trim().toLowerCase() === normalizedEmail)
+    ? Object.values(store.accounts).find(
+        (account) => account.email?.trim().toLowerCase() === normalizedEmail
+      )
     : undefined
 
   if (emailMatch && existingEmailPolicy === 'reject') {
@@ -588,26 +610,25 @@ export function saveAuthenticatedAccount(
     throw new Error(`Account alias already exists: ${alias}`)
   }
 
-  const targetAlias = existingEmailPolicy === 'update' && emailMatch
-    ? emailMatch.alias
-    : alias
+  const targetAlias = existingEmailPolicy === 'update' && emailMatch ? emailMatch.alias : alias
   const existing = store.accounts[targetAlias]
   const entry = buildHistoryEntry(creds.rateLimits)
 
-  store.accounts[targetAlias] = existing && existingEmailPolicy === 'update'
-    ? {
-        ...existing,
-        ...creds,
-        alias: targetAlias,
-        usageCount: existing.usageCount,
-        rateLimitHistory: existing.rateLimitHistory
-      }
-    : {
-        ...creds,
-        alias: targetAlias,
-        usageCount: 0,
-        rateLimitHistory: entry ? [entry] : creds.rateLimitHistory
-      }
+  store.accounts[targetAlias] =
+    existing && existingEmailPolicy === 'update'
+      ? {
+          ...existing,
+          ...creds,
+          alias: targetAlias,
+          usageCount: existing.usageCount,
+          rateLimitHistory: existing.rateLimitHistory
+        }
+      : {
+          ...creds,
+          alias: targetAlias,
+          usageCount: 0,
+          rateLimitHistory: entry ? [entry] : creds.rateLimitHistory
+        }
 
   if (!store.activeAlias) {
     store.activeAlias = targetAlias

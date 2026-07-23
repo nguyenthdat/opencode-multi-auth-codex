@@ -160,7 +160,7 @@ export async function getNextAccount(config, selection) {
         const acc = store.accounts[alias];
         healthMap.set(alias, evaluateAccountHealth(acc, now));
     }
-    const availableAliases = aliases.filter(alias => {
+    const availableAliases = aliases.filter((alias) => {
         const health = healthMap.get(alias);
         return health?.isHealthy === true;
     });
@@ -211,7 +211,7 @@ export async function getNextAccount(config, selection) {
             case 'weighted-round-robin': {
                 const weights = runtimeSettings.settings.accountWeights;
                 // Filter to healthy accounts with weights
-                const weightedAliases = candidateAliases.filter(alias => (weights[alias] || 0) > 0);
+                const weightedAliases = candidateAliases.filter((alias) => (weights[alias] || 0) > 0);
                 if (weightedAliases.length === 0) {
                     // Fallback to round-robin if no weights defined
                     const sorted = [...candidateAliases].sort((a, b) => {

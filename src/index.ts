@@ -131,14 +131,12 @@ function normalizeModel(model: string | undefined): string {
 
   if (
     preferLatest &&
-    (
-      baseModel === 'gpt-5.6' ||
+    (baseModel === 'gpt-5.6' ||
       baseModel === 'gpt-5.5' ||
       baseModel === 'gpt-5.4' ||
       baseModel === 'gpt-5.3-codex' ||
       baseModel === 'gpt-5.2-codex' ||
-      baseModel === 'gpt-5-codex'
-    )
+      baseModel === 'gpt-5-codex')
   ) {
     const latestModel = (
       process.env.OPENCODE_MULTI_AUTH_CODEX_LATEST_MODEL || DEFAULT_LATEST_CODEX_MODEL
@@ -175,19 +173,16 @@ function extractErrorMessage(payload: any, fallbackText: string = ''): string {
     return fallbackText
   }
 
-  const detailMessage = typeof payload?.detail?.message === 'string'
-    ? payload.detail.message
-    : typeof payload?.detail === 'string'
-      ? payload.detail
-      : ''
+  const detailMessage =
+    typeof payload?.detail?.message === 'string'
+      ? payload.detail.message
+      : typeof payload?.detail === 'string'
+        ? payload.detail
+        : ''
 
-  const errorMessage = typeof payload?.error?.message === 'string'
-    ? payload.error.message
-    : ''
+  const errorMessage = typeof payload?.error?.message === 'string' ? payload.error.message : ''
 
-  const topLevelMessage = typeof payload?.message === 'string'
-    ? payload.message
-    : ''
+  const topLevelMessage = typeof payload?.message === 'string' ? payload.message : ''
 
   return detailMessage || errorMessage || topLevelMessage || fallbackText
 }
@@ -282,12 +277,15 @@ async function convertSseToJson(response: Response, headers: Headers): Promise<R
  *
  * Rotates between multiple ChatGPT Plus/Pro accounts for rate limit resilience.
  */
-const MultiAuthPlugin: Plugin = async ({ client, $, serverUrl, project, directory }: PluginInput) => {
+const MultiAuthPlugin: Plugin = async ({
+  client,
+  $,
+  serverUrl,
+  project,
+  directory
+}: PluginInput) => {
   const terminalNotifierPath = (() => {
-    const candidates = [
-      '/opt/homebrew/bin/terminal-notifier',
-      '/usr/local/bin/terminal-notifier'
-    ]
+    const candidates = ['/opt/homebrew/bin/terminal-notifier', '/usr/local/bin/terminal-notifier']
     for (const c of candidates) {
       try {
         if (fs.existsSync(c)) return c
@@ -300,7 +298,9 @@ const MultiAuthPlugin: Plugin = async ({ client, $, serverUrl, project, director
 
   const notifyEnabledRaw = process.env.OPENCODE_MULTI_AUTH_NOTIFY
   const notifyEnabled = notifyEnabledRaw === '1' || notifyEnabledRaw === 'true'
-  const notifySound = (process.env.OPENCODE_MULTI_AUTH_NOTIFY_SOUND || '/System/Library/Sounds/Glass.aiff').trim()
+  const notifySound = (
+    process.env.OPENCODE_MULTI_AUTH_NOTIFY_SOUND || '/System/Library/Sounds/Glass.aiff'
+  ).trim()
 
   const lastStatusBySession = new Map<string, string>()
   const lastNotifiedAtByKey = new Map<string, number>()
@@ -335,7 +335,9 @@ const MultiAuthPlugin: Plugin = async ({ client, $, serverUrl, project, director
       if (macOpenEnabled && clickUrl && !terminalNotifierPath && !didWarnTerminalNotifier) {
         didWarnTerminalNotifier = true
         if (process.env.OPENCODE_MULTI_AUTH_DEBUG === '1') {
-          console.log('[multi-auth] mac click-to-open requires terminal-notifier (brew install terminal-notifier)')
+          console.log(
+            '[multi-auth] mac click-to-open requires terminal-notifier (brew install terminal-notifier)'
+          )
         }
       }
 
@@ -362,7 +364,6 @@ const MultiAuthPlugin: Plugin = async ({ client, $, serverUrl, project, director
     }
   }
 
-
   const ntfyUrl = (process.env.OPENCODE_MULTI_AUTH_NOTIFY_NTFY_URL || '').trim()
   const ntfyToken = (process.env.OPENCODE_MULTI_AUTH_NOTIFY_NTFY_TOKEN || '').trim()
   const notifyUiBaseUrl = (process.env.OPENCODE_MULTI_AUTH_NOTIFY_UI_BASE_URL || '').trim()
@@ -373,9 +374,8 @@ const MultiAuthPlugin: Plugin = async ({ client, $, serverUrl, project, director
     return `${base}/session/${sessionID}`
   }
 
-
-
-  const projectLabel = (((project as any)?.name as string | undefined) || project?.id || '').trim() || 'OpenCode'
+  const projectLabel =
+    (((project as any)?.name as string | undefined) || project?.id || '').trim() || 'OpenCode'
 
   type SessionMeta = { title?: string }
   const sessionMetaCache = new Map<string, SessionMeta>()
@@ -386,13 +386,19 @@ const MultiAuthPlugin: Plugin = async ({ client, $, serverUrl, project, director
     return `OpenCode - ${projectLabel}`
   }
 
-  const formatBody = (kind: 'idle' | 'retry' | 'error', sessionID: string, detail?: string): string => {
+  const formatBody = (
+    kind: 'idle' | 'retry' | 'error',
+    sessionID: string,
+    detail?: string
+  ): string => {
     const meta = sessionMetaCache.get(sessionID) || {}
     const titleLine = meta.title ? `Task: ${meta.title}` : ''
     const url = getSessionUrl(sessionID)
 
     if (kind === 'idle') {
-      return [titleLine, `Session finished: ${sessionID}`, detail || '', url].filter(Boolean).join('\n')
+      return [titleLine, `Session finished: ${sessionID}`, detail || '', url]
+        .filter(Boolean)
+        .join('\n')
     }
 
     if (kind === 'retry') {
@@ -402,12 +408,20 @@ const MultiAuthPlugin: Plugin = async ({ client, $, serverUrl, project, director
     return [titleLine, `Error: ${sessionID}`, detail || '', url].filter(Boolean).join('\n')
   }
 
-  const notifyMacRich = (kind: 'idle' | 'retry' | 'error', sessionID: string, detail?: string): void => {
+  const notifyMacRich = (
+    kind: 'idle' | 'retry' | 'error',
+    sessionID: string,
+    detail?: string
+  ): void => {
     const body = formatBody(kind, sessionID, detail)
     notifyMac(formatTitle(kind), body, getSessionUrl(sessionID) || undefined)
   }
 
-  const notifyNtfyRich = async (kind: 'idle' | 'retry' | 'error', sessionID: string, detail?: string): Promise<void> => {
+  const notifyNtfyRich = async (
+    kind: 'idle' | 'retry' | 'error',
+    sessionID: string,
+    detail?: string
+  ): Promise<void> => {
     if (!notifyEnabled) return
     if (!ntfyUrl) return
 
@@ -420,8 +434,8 @@ const MultiAuthPlugin: Plugin = async ({ client, $, serverUrl, project, director
 
     const headers: Record<string, string> = {
       'Content-Type': 'text/plain; charset=utf-8',
-      'Title': title,
-      'Priority': priority
+      Title: title,
+      Priority: priority
     }
 
     if (sessionUrl) headers['Click'] = sessionUrl
@@ -451,7 +465,9 @@ const MultiAuthPlugin: Plugin = async ({ client, $, serverUrl, project, director
     // OpenCode has emitted both "seconds-until-next" and "epoch ms" variants over time.
     if (typeof next === 'number') {
       const seconds =
-        next > 1e12 ? Math.max(0, Math.round((next - Date.now()) / 1000)) : Math.max(0, Math.round(next))
+        next > 1e12
+          ? Math.max(0, Math.round((next - Date.now()) / 1000))
+          : Math.max(0, Math.round(next))
       parts.push(`Next in: ${seconds}s`)
     }
     if (message) parts.push(message)
@@ -493,9 +509,7 @@ const MultiAuthPlugin: Plugin = async ({ client, $, serverUrl, project, director
       if (!event || !('type' in event)) return
 
       if (event.type === 'session.created' || event.type === 'session.updated') {
-        const info = (event as any).properties?.info as
-          | { id?: string; title?: string }
-          | undefined
+        const info = (event as any).properties?.info as { id?: string; title?: string } | undefined
         const id = info?.id
         if (id) {
           sessionMetaCache.set(id, { title: info?.title })
@@ -560,7 +574,9 @@ const MultiAuthPlugin: Plugin = async ({ client, $, serverUrl, project, director
       const injectModels = injectModelsRaw !== '0' && injectModelsRaw !== 'false'
       if (!injectModels) return
 
-      const latestModel = (process.env.OPENCODE_MULTI_AUTH_CODEX_LATEST_MODEL || DEFAULT_LATEST_CODEX_MODEL).trim()
+      const latestModel = (
+        process.env.OPENCODE_MULTI_AUTH_CODEX_LATEST_MODEL || DEFAULT_LATEST_CODEX_MODEL
+      ).trim()
       try {
         const openai = (config.provider?.[PROVIDER_ID] as any) || null
         if (!openai || typeof openai !== 'object') return
@@ -568,25 +584,24 @@ const MultiAuthPlugin: Plugin = async ({ client, $, serverUrl, project, director
         openai.whitelist ||= []
 
         const defaultModels = getDefaultModels()
-        const injectedModelIds = Array.from(new Set([
-          latestModel,
-          ...GPT_5_6_MODELS,
-          'gpt-5.3-codex-spark'
-        ]))
+        const injectedModelIds = Array.from(
+          new Set([latestModel, ...GPT_5_6_MODELS, 'gpt-5.3-codex-spark'])
+        )
 
         for (const modelID of injectedModelIds) {
           const model = defaultModels[modelID]
           if (!model) continue
 
           const existing = openai.models[modelID]
-          openai.models[modelID] = existing && typeof existing === 'object'
-            ? {
-                ...model,
-                ...existing,
-                options: { ...model.options, ...(existing.options || {}) },
-                variants: { ...model.variants, ...(existing.variants || {}) }
-              }
-            : model
+          openai.models[modelID] =
+            existing && typeof existing === 'object'
+              ? {
+                  ...model,
+                  ...existing,
+                  options: { ...model.options, ...(existing.options || {}) },
+                  variants: { ...model.variants, ...(existing.variants || {}) }
+                }
+              : model
         }
 
         for (const modelID of injectedModelIds) {
@@ -634,26 +649,28 @@ const MultiAuthPlugin: Plugin = async ({ client, $, serverUrl, project, director
           }
 
           const normalizedModel = normalizeModel(body.model)
-          
+
           const store = loadStore()
           const forceState = getForceState()
           const forcePinned = isForceActive() && !!forceState.forcedAlias
-          const eligibleCount = Object.values(store.accounts).filter(acc => {
+          const eligibleCount = Object.values(store.accounts).filter((acc) => {
             const now = Date.now()
-            return (!acc.rateLimitedUntil || acc.rateLimitedUntil < now) &&
-                   (!acc.modelUnsupportedUntil || acc.modelUnsupportedUntil < now) &&
-                   (!acc.workspaceDeactivatedUntil || acc.workspaceDeactivatedUntil < now) &&
-                   !acc.authInvalid &&
-                   acc.enabled !== false
+            return (
+              (!acc.rateLimitedUntil || acc.rateLimitedUntil < now) &&
+              (!acc.modelUnsupportedUntil || acc.modelUnsupportedUntil < now) &&
+              (!acc.workspaceDeactivatedUntil || acc.workspaceDeactivatedUntil < now) &&
+              !acc.authInvalid &&
+              acc.enabled !== false
+            )
           }).length
-          
+
           const maxAttempts = forcePinned ? 1 : Math.max(1, eligibleCount)
           const triedAliases = new Set<string>()
           let attempt = 0
 
           while (attempt < maxAttempts) {
             attempt++
-            
+
             const settings = getRuntimeSettings()
             const effectiveConfig: PluginConfig = {
               ...pluginConfig,
@@ -682,7 +699,7 @@ const MultiAuthPlugin: Plugin = async ({ client, $, serverUrl, project, director
                 }
               }
               return new Response(
-                JSON.stringify({ 
+                JSON.stringify({
                   error: Errors.noEligibleAccounts('No available accounts after filtering')
                 }),
                 { status: 503, headers: { 'Content-Type': 'application/json' } }
@@ -690,7 +707,7 @@ const MultiAuthPlugin: Plugin = async ({ client, $, serverUrl, project, director
             }
 
             const { account, token } = rotation
-            
+
             if (triedAliases.has(account.alias)) {
               continue
             }
@@ -700,10 +717,10 @@ const MultiAuthPlugin: Plugin = async ({ client, $, serverUrl, project, director
             const accountId = decoded?.[JWT_CLAIM_PATH]?.chatgpt_account_id
             if (!accountId) {
               return new Response(
-                JSON.stringify({ 
-                  error: { 
+                JSON.stringify({
+                  error: {
                     code: 'TOKEN_PARSE_ERROR',
-                    message: '[multi-auth] Failed to extract accountId from token' 
+                    message: '[multi-auth] Failed to extract accountId from token'
                   }
                 }),
                 { status: 401, headers: { 'Content-Type': 'application/json' } }
@@ -726,7 +743,12 @@ const MultiAuthPlugin: Plugin = async ({ client, $, serverUrl, project, director
 
             if (payload.truncation === undefined) {
               const truncationRaw = (process.env.OPENCODE_MULTI_AUTH_TRUNCATION || '').trim()
-              if (truncationRaw && truncationRaw !== 'disabled' && truncationRaw !== 'false' && truncationRaw !== '0') {
+              if (
+                truncationRaw &&
+                truncationRaw !== 'disabled' &&
+                truncationRaw !== 'false' &&
+                truncationRaw !== '0'
+              ) {
                 payload.truncation = truncationRaw
               }
             }
@@ -754,13 +776,20 @@ const MultiAuthPlugin: Plugin = async ({ client, $, serverUrl, project, director
               payload.service_tier = payload.service_tier || 'priority'
 
               if (process.env.OPENCODE_MULTI_AUTH_DEBUG === '1') {
-                console.log(`[multi-auth] fast mode enabled: ${normalizedModel} + service_tier=priority`)
+                console.log(
+                  `[multi-auth] fast mode enabled: ${normalizedModel} + service_tier=priority`
+                )
               }
             } else if (fastMode && process.env.OPENCODE_MULTI_AUTH_DEBUG === '1') {
-              console.log(`[multi-auth] fast mode ignored for unsupported model: ${normalizedModel}`)
+              console.log(
+                `[multi-auth] fast mode ignored for unsupported model: ${normalizedModel}`
+              )
             }
 
-            if (process.env.OPENCODE_MULTI_AUTH_DEBUG === '1' && payload.service_tier === 'priority') {
+            if (
+              process.env.OPENCODE_MULTI_AUTH_DEBUG === '1' &&
+              payload.service_tier === 'priority'
+            ) {
               console.log(`[multi-auth] priority service tier requested for ${normalizedModel}`)
             }
 
@@ -786,7 +815,9 @@ const MultiAuthPlugin: Plugin = async ({ client, $, serverUrl, project, director
 
               headers.set('accept', 'text/event-stream')
 
-              const sendPayload = async (requestPayload: Record<string, any>): Promise<Response> => {
+              const sendPayload = async (
+                requestPayload: Record<string, any>
+              ): Promise<Response> => {
                 return fetch(url, {
                   method: init?.method || 'POST',
                   headers,
@@ -815,12 +846,20 @@ const MultiAuthPlugin: Plugin = async ({ client, $, serverUrl, project, director
               let mergedRateLimits = applyLimitUpdate(res)
 
               if (res.status === 400 && payload.service_tier === 'priority') {
-                const errorData = await res.clone().json().catch(() => ({})) as any
-                const errorText = await res.clone().text().catch(() => '')
+                const errorData = (await res
+                  .clone()
+                  .json()
+                  .catch(() => ({}))) as any
+                const errorText = await res
+                  .clone()
+                  .text()
+                  .catch(() => '')
 
                 if (isCyberPolicyError(errorData, errorText)) {
                   if (process.env.OPENCODE_MULTI_AUTH_DEBUG === '1') {
-                    console.log('[multi-auth] cyber_policy on priority tier; retrying once without service_tier')
+                    console.log(
+                      '[multi-auth] cyber_policy on priority tier; retrying once without service_tier'
+                    )
                   }
 
                   const standardTierPayload = { ...payload }
@@ -831,7 +870,10 @@ const MultiAuthPlugin: Plugin = async ({ client, $, serverUrl, project, director
               }
 
               if (res.status === 401 || res.status === 403) {
-                const errorData = await res.clone().json().catch(() => ({})) as { error?: { message?: string } }
+                const errorData = (await res
+                  .clone()
+                  .json()
+                  .catch(() => ({}))) as { error?: { message?: string } }
                 const message = errorData?.error?.message || ''
                 if (message.toLowerCase().includes('invalidated') || res.status === 401) {
                   markAuthInvalid(account.alias)
@@ -850,7 +892,10 @@ const MultiAuthPlugin: Plugin = async ({ client, $, serverUrl, project, director
               }
 
               if (res.status === 429) {
-                const errorData = await res.clone().json().catch(() => ({})) as any
+                const errorData = (await res
+                  .clone()
+                  .json()
+                  .catch(() => ({}))) as any
                 const errorText = extractErrorMessage(errorData)
                 const rateLimitedUntil = resolveRateLimitedUntil(
                   mergedRateLimits,
@@ -873,8 +918,14 @@ const MultiAuthPlugin: Plugin = async ({ client, $, serverUrl, project, director
               }
 
               if (res.status === 402) {
-                const errorData = await res.clone().json().catch(() => null) as any
-                const errorText = await res.clone().text().catch(() => '')
+                const errorData = (await res
+                  .clone()
+                  .json()
+                  .catch(() => null)) as any
+                const errorText = await res
+                  .clone()
+                  .text()
+                  .catch(() => '')
 
                 const code =
                   (typeof errorData?.detail?.code === 'string' && errorData.detail.code) ||
@@ -894,9 +945,13 @@ const MultiAuthPlugin: Plugin = async ({ client, $, serverUrl, project, director
                   message.toLowerCase().includes('deactivated workspace')
 
                 if (isDeactivatedWorkspace) {
-                  markWorkspaceDeactivated(account.alias, pluginConfig.workspaceDeactivatedCooldownMs, {
-                    error: message || code
-                  })
+                  markWorkspaceDeactivated(
+                    account.alias,
+                    pluginConfig.workspaceDeactivatedCooldownMs,
+                    {
+                      error: message || code
+                    }
+                  )
 
                   if (attempt < maxAttempts) {
                     continue
@@ -912,7 +967,10 @@ const MultiAuthPlugin: Plugin = async ({ client, $, serverUrl, project, director
               }
 
               if (res.status === 400) {
-                const errorData = await res.clone().json().catch(() => ({})) as any
+                const errorData = (await res
+                  .clone()
+                  .json()
+                  .catch(() => ({}))) as any
                 const message =
                   (typeof errorData?.detail === 'string' && errorData.detail) ||
                   (typeof errorData?.error?.message === 'string' && errorData.error.message) ||
@@ -948,21 +1006,26 @@ const MultiAuthPlugin: Plugin = async ({ client, $, serverUrl, project, director
               }
 
               const responseHeaders = ensureContentType(res.headers)
-              if (!isStreaming && responseHeaders.get('content-type')?.includes('text/event-stream')) {
+              if (
+                !isStreaming &&
+                responseHeaders.get('content-type')?.includes('text/event-stream')
+              ) {
                 return await convertSseToJson(res, responseHeaders)
               }
 
               return res
             } catch (err) {
               return new Response(
-                JSON.stringify({ error: { code: 'REQUEST_FAILED', message: `[multi-auth] Request failed: ${err}` } }),
+                JSON.stringify({
+                  error: { code: 'REQUEST_FAILED', message: `[multi-auth] Request failed: ${err}` }
+                }),
                 { status: 500, headers: { 'Content-Type': 'application/json' } }
               )
             }
           }
 
           return new Response(
-            JSON.stringify({ 
+            JSON.stringify({
               error: Errors.maxRetriesExceeded(attempt, Array.from(triedAliases))
             }),
             { status: 503, headers: { 'Content-Type': 'application/json' } }

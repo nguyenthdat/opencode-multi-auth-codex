@@ -1,8 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, jest, mock } from 'bun:test'
-import {
-  classifyUsageApiFailure,
-  fetchUsageRateLimitsForAccount
-} from '../../src/usage-limits.js'
+import { classifyUsageApiFailure, fetchUsageRateLimitsForAccount } from '../../src/usage-limits.js'
 import type { AccountCredentials } from '../../src/types.js'
 
 describe('usage API failure classification', () => {
@@ -75,13 +72,19 @@ describe('usage API fetch', () => {
   })
 
   it('calls the Codex usage endpoint with Codex originator headers', async () => {
-    const mockFetch = jest.fn(async () => new Response(JSON.stringify({
-      plan_type: 'pro',
-      rate_limit: {
-        primary_window: { used_percent: 25, reset_after_seconds: 60 },
-        secondary_window: { used_percent: 10, reset_after_seconds: 120 }
-      }
-    }), { status: 200 }))
+    const mockFetch = jest.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            plan_type: 'pro',
+            rate_limit: {
+              primary_window: { used_percent: 25, reset_after_seconds: 60 },
+              secondary_window: { used_percent: 10, reset_after_seconds: 120 }
+            }
+          }),
+          { status: 200 }
+        )
+    )
     global.fetch = mockFetch as unknown as typeof fetch
 
     const result = await fetchUsageRateLimitsForAccount(account)

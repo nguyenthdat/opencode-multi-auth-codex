@@ -1,11 +1,6 @@
 import { loadStore, saveStore } from './store.js';
 const FORCE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
-const ROTATION_STRATEGIES = new Set([
-    'round-robin',
-    'least-used',
-    'random',
-    'weighted-round-robin'
-]);
+const ROTATION_STRATEGIES = new Set(['round-robin', 'least-used', 'random', 'weighted-round-robin']);
 function isRotationStrategy(value) {
     return typeof value === 'string' && ROTATION_STRATEGIES.has(value);
 }
@@ -50,13 +45,9 @@ export function activateForce(alias, actor = 'system') {
         return { success: false, error: `Account '${alias}' is disabled` };
     }
     const now = Date.now();
-    const keepExistingTtl = store.forcedAlias === alias &&
-        typeof store.forcedUntil === 'number' &&
-        store.forcedUntil > now;
+    const keepExistingTtl = store.forcedAlias === alias && typeof store.forcedUntil === 'number' && store.forcedUntil > now;
     const forcedUntil = keepExistingTtl ? store.forcedUntil : now + FORCE_TTL_MS;
-    const currentStrategy = store.settings?.rotationStrategy ||
-        store.rotationStrategy ||
-        'round-robin';
+    const currentStrategy = store.settings?.rotationStrategy || store.rotationStrategy || 'round-robin';
     // Store previous rotation strategy if not already forcing
     const previousStrategy = (store.forcedAlias ? store.previousRotationStrategy : currentStrategy) ?? null;
     const newStore = {
@@ -80,12 +71,8 @@ export function activateForce(alias, actor = 'system') {
 export function clearForce() {
     const store = loadStore();
     const restoredStrategy = store.previousRotationStrategy;
-    const currentStrategy = store.settings?.rotationStrategy ||
-        store.rotationStrategy ||
-        'round-robin';
-    const nextStrategy = isRotationStrategy(restoredStrategy)
-        ? restoredStrategy
-        : currentStrategy;
+    const currentStrategy = store.settings?.rotationStrategy || store.rotationStrategy || 'round-robin';
+    const nextStrategy = isRotationStrategy(restoredStrategy) ? restoredStrategy : currentStrategy;
     const newStore = {
         ...store,
         forcedAlias: null,

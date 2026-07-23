@@ -9,14 +9,11 @@ export interface ForceState {
 }
 
 const FORCE_TTL_MS = 24 * 60 * 60 * 1000 // 24 hours
-const ROTATION_STRATEGIES = new Set([
-  'round-robin',
-  'least-used',
-  'random',
-  'weighted-round-robin'
-])
+const ROTATION_STRATEGIES = new Set(['round-robin', 'least-used', 'random', 'weighted-round-robin'])
 
-function isRotationStrategy(value: string | null | undefined): value is NonNullable<AccountStore['rotationStrategy']> {
+function isRotationStrategy(
+  value: string | null | undefined
+): value is NonNullable<AccountStore['rotationStrategy']> {
   return typeof value === 'string' && ROTATION_STRATEGIES.has(value)
 }
 
@@ -35,24 +32,24 @@ export function isForceActive(): boolean {
   if (!state.forcedAlias || !state.forcedUntil) {
     return false
   }
-  
+
   const now = Date.now()
   if (now > state.forcedUntil) {
     return false
   }
-  
+
   // Check if forced alias still exists and is eligible
   const store = loadStore()
   const forcedAccount = store.accounts[state.forcedAlias]
   if (!forcedAccount) {
     return false
   }
-  
+
   // Check if account is disabled
   if (forcedAccount.enabled === false) {
     return false
   }
-  
+
   return true
 }
 
@@ -61,32 +58,29 @@ export function activateForce(
   actor: string = 'system'
 ): { success: boolean; error?: string; state?: ForceState } {
   const store = loadStore()
-  
+
   // Validate alias exists
   if (!store.accounts[alias]) {
     return { success: false, error: `Account '${alias}' not found` }
   }
-  
+
   // Validate alias is enabled
   if (store.accounts[alias].enabled === false) {
     return { success: false, error: `Account '${alias}' is disabled` }
   }
-  
+
   const now = Date.now()
   const keepExistingTtl =
-    store.forcedAlias === alias &&
-    typeof store.forcedUntil === 'number' &&
-    store.forcedUntil > now
+    store.forcedAlias === alias && typeof store.forcedUntil === 'number' && store.forcedUntil > now
   const forcedUntil = keepExistingTtl ? store.forcedUntil! : now + FORCE_TTL_MS
-  
+
   const currentStrategy =
-    store.settings?.rotationStrategy ||
-    store.rotationStrategy ||
-    'round-robin'
+    store.settings?.rotationStrategy || store.rotationStrategy || 'round-robin'
 
   // Store previous rotation strategy if not already forcing
-  const previousStrategy = (store.forcedAlias ? store.previousRotationStrategy : currentStrategy) ?? null
-  
+  const previousStrategy =
+    (store.forcedAlias ? store.previousRotationStrategy : currentStrategy) ?? null
+
   const newStore: AccountStore = {
     ...store,
     forcedAlias: alias,
@@ -94,9 +88,9 @@ export function activateForce(
     previousRotationStrategy: previousStrategy,
     forcedBy: actor
   }
-  
+
   saveStore(newStore)
-  
+
   return {
     success: true,
     state: {
@@ -112,13 +106,9 @@ export function clearForce(): { success: boolean; restoredStrategy?: string | nu
   const store = loadStore()
   const restoredStrategy = store.previousRotationStrategy
   const currentStrategy =
-    store.settings?.rotationStrategy ||
-    store.rotationStrategy ||
-    'round-robin'
-  const nextStrategy = isRotationStrategy(restoredStrategy)
-    ? restoredStrategy
-    : currentStrategy
-  
+    store.settings?.rotationStrategy || store.rotationStrategy || 'round-robin'
+  const nextStrategy = isRotationStrategy(restoredStrategy) ? restoredStrategy : currentStrategy
+
   const newStore: AccountStore = {
     ...store,
     forcedAlias: null,
@@ -134,9 +124,9 @@ export function clearForce(): { success: boolean; restoredStrategy?: string | nu
       rotationStrategy: nextStrategy
     }
   }
-  
+
   saveStore(newStore)
-  
+
   return {
     success: true,
     restoredStrategy
@@ -145,32 +135,32 @@ export function clearForce(): { success: boolean; restoredStrategy?: string | nu
 
 export function checkAndAutoClearForce(): { wasCleared: boolean; reason?: string } {
   const state = getForceState()
-  
+
   if (!state.forcedAlias) {
     return { wasCleared: false }
   }
-  
+
   const store = loadStore()
   const now = Date.now()
-  
+
   // Check expiry
   if (state.forcedUntil && now > state.forcedUntil) {
     clearForce()
     return { wasCleared: true, reason: 'expired' }
   }
-  
+
   // Check if alias still exists
   if (!store.accounts[state.forcedAlias]) {
     clearForce()
     return { wasCleared: true, reason: 'account_removed' }
   }
-  
+
   // Check if alias is disabled
   if (store.accounts[state.forcedAlias].enabled === false) {
     clearForce()
     return { wasCleared: true, reason: 'account_disabled' }
   }
-  
+
   return { wasCleared: false }
 }
 
@@ -186,7 +176,7 @@ export function getRemainingForceTimeMs(): number {
 export function formatForceDuration(ms: number): string {
   const hours = Math.floor(ms / (60 * 60 * 1000))
   const minutes = Math.floor((ms % (60 * 60 * 1000)) / (60 * 1000))
-  
+
   if (hours > 0) {
     return `${hours}h ${minutes}m`
   }

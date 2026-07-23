@@ -35,9 +35,7 @@ function parseTimestamp(value: string): number | undefined {
 }
 
 function parseHumanDate(value: string): number | undefined {
-  const normalized = value
-    .replace(/\b(\d{1,2})(st|nd|rd|th)\b/gi, '$1')
-    .trim()
+  const normalized = value.replace(/\b(\d{1,2})(st|nd|rd|th)\b/gi, '$1').trim()
   const parsed = Date.parse(normalized)
   if (!Number.isNaN(parsed)) return parsed
   return undefined
@@ -52,7 +50,11 @@ function matchWindowKey(headerName: string): keyof AccountRateLimits | null {
   return null
 }
 
-function ensureWindow(update: RateLimitUpdate, key: keyof AccountRateLimits, now: number): RateLimitWindow {
+function ensureWindow(
+  update: RateLimitUpdate,
+  key: keyof AccountRateLimits,
+  now: number
+): RateLimitWindow {
   if (!update[key]) {
     update[key] = { updatedAt: now }
   } else if (!update[key]?.updatedAt) {
@@ -63,10 +65,7 @@ function ensureWindow(update: RateLimitUpdate, key: keyof AccountRateLimits, now
 
 export function hasMeaningfulRateLimitWindow(window: RateLimitWindow | undefined): boolean {
   if (!window) return false
-  return (
-    typeof window.remaining === 'number' ||
-    typeof window.resetAt === 'number'
-  )
+  return typeof window.remaining === 'number' || typeof window.resetAt === 'number'
 }
 
 export function hasMeaningfulRateLimits(rateLimits: AccountRateLimits | undefined | null): boolean {
@@ -174,7 +173,9 @@ export function parseRateLimitResetFromError(
 ): number | undefined {
   if (!text) return undefined
 
-  const retryAfterMatch = text.match(/(?:retry[\s-]*after|try again in)\s*(\d+)\s*(seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h)\b/i)
+  const retryAfterMatch = text.match(
+    /(?:retry[\s-]*after|try again in)\s*(\d+)\s*(seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h)\b/i
+  )
   if (retryAfterMatch) {
     const amount = Number(retryAfterMatch[1])
     const unit = retryAfterMatch[2].toLowerCase()
@@ -214,10 +215,7 @@ export function getBlockingRateLimitResetAt(
 ): number | undefined {
   if (!rateLimits) return undefined
 
-  const windows: Array<RateLimitWindow | undefined> = [
-    rateLimits.fiveHour,
-    rateLimits.weekly
-  ]
+  const windows: Array<RateLimitWindow | undefined> = [rateLimits.fiveHour, rateLimits.weekly]
 
   const exhaustedResets: number[] = []
   const futureResets: number[] = []
