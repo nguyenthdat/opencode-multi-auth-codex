@@ -65,9 +65,9 @@
     "@opencode-ai/sdk": "^1.18.4",
     "@opentui/solid": "0.4.5",
     "@types/bun": "^1.3.14",
-    "@types/node": "^22.20.1",
+    "@types/node": "^26.1.1",
     "solid-js": "1.9.12",
-    "typescript": "^5.9.3"
+    "typescript": "^7.0.2"
   },
   "files": ["dist", "auto-login/auto_login.py", "auto-login/credentials.example.json"],
   "publishConfig": {
