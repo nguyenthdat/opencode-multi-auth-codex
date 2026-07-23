@@ -48,13 +48,24 @@ REDIRECT_PORT = 1455
 SMSPOOL_API_BASE = "https://api.smspool.net"
 SMSPOOL_DEFAULT_COUNTRY = 1
 SMSPOOL_OPENAI_SERVICE = 671
-SMSPOOL_DEFAULT_TIMEOUT = 60
+SMSPOOL_DEFAULT_TIMEOUT = 180
 SMSPOOL_POLL_INTERVAL = 5
 SMSPOOL_DEFAULT_MAX_ORDERS = 3
 
-# Store paths (matching the plugin)
-STORE_DIR = Path.home() / ".config" / "opencode"
-STORE_FILE = STORE_DIR / "opencode-multi-auth-codex-accounts.json"
+# Store paths (matching the TypeScript plugin)
+STORE_DIR = Path(
+    os.environ.get(
+        "OPENCODE_MULTI_AUTH_STORE_DIR",
+        Path.home() / ".config" / "opencode-multi-auth",
+    )
+).expanduser()
+STORE_FILE = Path(
+    os.environ.get("OPENCODE_MULTI_AUTH_STORE_FILE", STORE_DIR / "accounts.json")
+).expanduser()
+STORE_DIR = STORE_FILE.parent
+LEGACY_STORE_FILE = (
+    Path.home() / ".config" / "opencode" / "opencode-multi-auth-codex-accounts.json"
+)
 
 # Credentials file
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -308,32 +319,157 @@ def fetch_userinfo_email(access_token):
         return None
 
 
-# ── Account store (v2 format compatible with plugin) ───────────────────────
-def load_store():
-    if not STORE_FILE.exists():
-        return {
-            "version": 2,
-            "accounts": [],
-            "activeIndex": -1,
-            "rotationIndex": 0,
-            "lastRotation": int(time.time() * 1000),
+# ── Account store (TypeScript v2 format) ───────────────────────────────────
+def empty_store():
+    return {
+        "version": 2,
+        "accounts": {},
+        "activeAlias": None,
+        "rotationIndex": 0,
+        "lastRotation": int(time.time() * 1000),
+    }
+
+
+def sanitize_alias_seed(value):
+    cleaned = re.sub(r"[^a-z0-9._-]+", "-", str(value or "").strip().lower())
+    return cleaned.strip("-") or "account"
+
+
+def find_alias_by_email(store, email):
+    email_key = normalize_email(email)
+    if not email_key:
+        return None
+    return next(
+        (
+            alias
+            for alias, account in store["accounts"].items()
+            if normalize_email(account.get("email")) == email_key
+        ),
+        None,
+    )
+
+
+def unique_alias(store, preferred_alias, email=None):
+    if not preferred_alias:
+        numbers = [
+            int(match.group(1))
+            for alias in store["accounts"]
+            if (match := re.fullmatch(r"codex-(\d+)", alias))
+        ]
+        preferred_alias = f"codex-{max(numbers, default=0) + 1:02d}"
+    seed = preferred_alias
+    base = sanitize_alias_seed(seed)
+    candidate = base
+    suffix = 1
+    while candidate in store["accounts"]:
+        candidate = f"{base}-{suffix}"
+        suffix += 1
+    return candidate
+
+
+def upsert_store_account(store, account, preferred_alias=None):
+    existing_alias = find_alias_by_email(store, account.get("email"))
+    if existing_alias:
+        existing = store["accounts"][existing_alias]
+        store["accounts"][existing_alias] = {
+            **existing,
+            **account,
+            "alias": existing_alias,
+            "usageCount": existing.get("usageCount", 0),
+            "rateLimitHistory": existing.get("rateLimitHistory", []),
+            "enabled": existing.get("enabled", True),
+            "tags": existing.get("tags", []),
+            "notes": existing.get("notes", ""),
         }
-    with open(STORE_FILE, "r") as f:
-        return json.load(f)
+        return existing_alias, False
+
+    alias = unique_alias(
+        store, preferred_alias or account.get("alias"), account.get("email")
+    )
+    store["accounts"][alias] = {
+        **account,
+        "alias": alias,
+        "usageCount": account.get("usageCount", 0),
+    }
+    if not store.get("activeAlias"):
+        store["activeAlias"] = alias
+    return alias, True
+
+
+def migrate_legacy_accounts(store):
+    if LEGACY_STORE_FILE == STORE_FILE or not LEGACY_STORE_FILE.exists():
+        return 0
+    try:
+        with open(LEGACY_STORE_FILE, "r", encoding="utf-8") as legacy_file:
+            legacy = json.load(legacy_file)
+    except (OSError, json.JSONDecodeError) as error:
+        print(f"[WARNING] Could not read legacy store: {error}")
+        return 0
+
+    legacy_accounts = legacy.get("accounts") if isinstance(legacy, dict) else None
+    if not isinstance(legacy_accounts, list):
+        return 0
+
+    migrated = 0
+    for account in legacy_accounts:
+        if not isinstance(account, dict):
+            continue
+        if not account.get("accessToken") or not account.get("refreshToken"):
+            continue
+        if find_alias_by_email(store, account.get("email")):
+            continue
+        _, is_new = upsert_store_account(store, account)
+        migrated += int(is_new)
+    return migrated
+
+
+def load_store():
+    should_save = False
+    if not STORE_FILE.exists():
+        store = empty_store()
+    else:
+        with open(STORE_FILE, "r", encoding="utf-8") as store_file:
+            store = json.load(store_file)
+        if store.get("encrypted") is True:
+            raise RuntimeError(
+                "Current plugin store is encrypted; use dashboard-assisted auto-login or the plugin CLI"
+            )
+        accounts = store.get("accounts")
+        if isinstance(accounts, list):
+            converted = empty_store()
+            for account in accounts:
+                if isinstance(account, dict):
+                    upsert_store_account(converted, account)
+            store = converted
+            should_save = True
+        elif not isinstance(accounts, dict):
+            raise RuntimeError(f"Invalid plugin store schema at {STORE_FILE}")
+
+    migrated = migrate_legacy_accounts(store)
+    if migrated:
+        print(f"[INFO] Migrated {migrated} legacy account(s) into {STORE_FILE}")
+        should_save = True
+    if should_save:
+        save_store(store)
+    return store
 
 
 def save_store(store):
-    STORE_DIR.mkdir(parents=True, exist_ok=True)
+    STORE_FILE.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    os.chmod(STORE_FILE.parent, 0o700)
     if STORE_FILE.exists():
         shutil.copy2(STORE_FILE, STORE_FILE.with_suffix(".json.bak"))
     tmp = STORE_FILE.with_suffix(f".tmp-{os.getpid()}-{int(time.time() * 1000)}")
-    with open(tmp, "w") as f:
-        json.dump(store, f, indent=2)
-    tmp.rename(STORE_FILE)
+    with open(tmp, "w", encoding="utf-8") as store_file:
+        json.dump(store, store_file, indent=2)
+        store_file.write("\n")
+        store_file.flush()
+        os.fsync(store_file.fileno())
+    os.replace(tmp, STORE_FILE)
     os.chmod(STORE_FILE, 0o600)
 
 
-def add_account_to_store(tokens):
+def add_account_to_store(tokens, preferred_alias=None):
     now = int(time.time() * 1000)
     access_claims = decode_jwt_payload(tokens["access_token"])
     id_claims = (
@@ -357,40 +493,25 @@ def add_account_to_store(tokens):
     new_account = {
         "accessToken": tokens["access_token"],
         "refreshToken": tokens["refresh_token"],
-        "idToken": tokens.get("id_token"),
-        "accountId": account_id,
         "expiresAt": expires_at,
-        "email": email,
         "lastRefresh": datetime.now(timezone.utc).isoformat(),
         "lastSeenAt": now,
-        "addedAt": now,
         "source": "opencode",
         "authInvalid": False,
         "usageCount": 0,
         "enabled": True,
     }
+    if tokens.get("id_token"):
+        new_account["idToken"] = tokens["id_token"]
+    if account_id:
+        new_account["accountId"] = account_id
+    if email:
+        new_account["email"] = email
 
     store = load_store()
-    email_key = normalize_email(email)
-    if email_key:
-        for i, acc in enumerate(store["accounts"]):
-            if normalize_email(acc.get("email")) == email_key:
-                store["accounts"][i] = {
-                    **acc,
-                    **new_account,
-                    "usageCount": acc.get("usageCount", 0),
-                    "addedAt": acc.get("addedAt", now),
-                    "rateLimitHistory": acc.get("rateLimitHistory", []),
-                }
-                save_store(store)
-                return email, i, False
-
-    store["accounts"].append(new_account)
-    idx = len(store["accounts"]) - 1
-    if store["activeIndex"] < 0:
-        store["activeIndex"] = idx
+    alias, is_new = upsert_store_account(store, new_account, preferred_alias)
     save_store(store)
-    return email, idx, True
+    return email, alias, is_new
 
 
 # ── Credentials ─────────────────────────────────────────────────────────────
@@ -501,6 +622,14 @@ def _human_type(element, value, delay_ms=85):
     except Exception:
         pass
     element.type(value, delay=delay_ms)
+
+
+def _wait_and_click(page, selector, timeout=10000):
+    element = page.wait_for_selector(selector, timeout=timeout)
+    if element is None:
+        raise RuntimeError(f"Element did not appear: {selector}")
+    element.click()
+    return element
 
 
 def _encode_multipart(fields):
@@ -1038,10 +1167,11 @@ def _outlook_login(context, outlook_email, outlook_password):
         )
         _human_type(email_input, outlook_email)
         time.sleep(0.8)
-        mail_page.wait_for_selector(
+        _wait_and_click(
+            mail_page,
             "input#idSIButton9, button#idSIButton9, button:has-text('Next')",
             timeout=10000,
-        ).click()
+        )
         mail_page.wait_for_timeout(3000)
 
         # Enter password
@@ -1052,19 +1182,21 @@ def _outlook_login(context, outlook_email, outlook_password):
         )
         _human_type(pw_input, outlook_password)
         time.sleep(0.8)
-        mail_page.wait_for_selector(
+        _wait_and_click(
+            mail_page,
             "input#idSIButton9, button#idSIButton9, "
             "button:has-text('Sign in'), button:has-text('Next')",
             timeout=10000,
-        ).click()
+        )
         mail_page.wait_for_timeout(3000)
 
         # Handle "Stay signed in?"
         try:
-            mail_page.wait_for_selector(
+            _wait_and_click(
+                mail_page,
                 "input#idSIButton9, button:has-text('Yes')",
                 timeout=5000,
-            ).click()
+            )
             mail_page.wait_for_timeout(2000)
         except Exception:
             pass
@@ -1277,6 +1409,7 @@ def stop_callback_server():
 def login_account(
     email,
     chatgpt_password,
+    alias=None,
     outlook_password=None,
     totp_secret=None,
     smspool_config=None,
@@ -1544,10 +1677,11 @@ def login_account(
                 )
                 _human_type(email_input, email)
                 time.sleep(0.8)
-                page.wait_for_selector(
+                _wait_and_click(
+                    page,
                     "button[type='submit'], button:has-text('Continue')",
                     timeout=10000,
-                ).click()
+                )
                 page.wait_for_timeout(3000)
                 next_stage = _wait_for_next_auth_stage(timeout_ms=20000)
                 if next_stage == "ready":
@@ -1631,10 +1765,11 @@ def login_account(
                         )
                         _human_type(code_input, otp_code, delay_ms=110)
                         time.sleep(0.8)
-                        page.wait_for_selector(
+                        _wait_and_click(
+                            page,
                             "button[type='submit'], button:has-text('Continue')",
                             timeout=10000,
-                        ).click()
+                        )
                         page.wait_for_timeout(5000)
                         otp_login_done = True
                     else:
@@ -1658,11 +1793,12 @@ def login_account(
                     )
                     _human_type(pw_input, chatgpt_password)
                     time.sleep(0.8)
-                    page.wait_for_selector(
+                    _wait_and_click(
+                        page,
                         "button[type='submit'], button:has-text('Continue'), "
                         "button:has-text('Log in'), button:has-text('Sign in')",
                         timeout=10000,
-                    ).click()
+                    )
                     page.wait_for_timeout(5000)
 
                     # Check for "Incorrect password" error
@@ -1694,10 +1830,11 @@ def login_account(
                                         )
                                         _human_type(ci, otp_code, delay_ms=110)
                                         time.sleep(0.8)
-                                        page.wait_for_selector(
+                                        _wait_and_click(
+                                            page,
                                             "button[type='submit'], button:has-text('Continue')",
                                             timeout=10000,
-                                        ).click()
+                                        )
                                         page.wait_for_timeout(5000)
                                         otp_login_done = True
 
@@ -1746,10 +1883,11 @@ def login_account(
                         )
                         _human_type(ci, vcode, delay_ms=110)
                         time.sleep(0.8)
-                        page.wait_for_selector(
+                        _wait_and_click(
+                            page,
                             "button[type='submit'], button:has-text('Continue')",
                             timeout=10000,
-                        ).click()
+                        )
                         page.wait_for_timeout(5000)
 
         if not _has_callback() and not totp_done:
@@ -1883,9 +2021,9 @@ def login_account(
     print("  [DONE] Exchanging code for tokens...")
     tokens = exchange_code_for_tokens(captured_code, redirect_uri, code_verifier)
 
-    stored_email, index, is_new = add_account_to_store(tokens)
+    stored_email, stored_alias, is_new = add_account_to_store(tokens, alias)
     action = "Added new" if is_new else "Updated existing"
-    print(f"  {action} account #{index}: {stored_email}")
+    print(f"  {action} account {stored_alias}: {stored_email}")
     return stored_email
 
 
@@ -1895,7 +2033,8 @@ def cmd_check(accounts):
     now = int(time.time() * 1000)
 
     print(f"\n  Credentials file: {len(accounts)} account(s)")
-    print(f"  Plugin store:     {len(store['accounts'])} account(s)\n")
+    store_accounts = list(store["accounts"].values())
+    print(f"  Plugin store:     {len(store_accounts)} account(s)\n")
 
     for i, acc in enumerate(accounts):
         email = acc["email"]
@@ -1903,7 +2042,7 @@ def cmd_check(accounts):
         store_acc = next(
             (
                 s
-                for s in store["accounts"]
+                for s in store_accounts
                 if normalize_email(s.get("email")) == normalize_email(email)
             ),
             None,
@@ -1982,6 +2121,7 @@ def cmd_login(targets, defaults, headless=True, auth_url=None, browser_engine="a
                     result = login_account(
                         email,
                         chatgpt_pw,
+                        alias=acc.get("alias"),
                         outlook_password=outlook_pw,
                         totp_secret=totp_secret,
                         smspool_config=smspool_config,

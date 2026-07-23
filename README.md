@@ -238,7 +238,7 @@ The `auto-login/` directory contains a standalone Python script that **automates
 - Polls SMSPool's recommended `/request/active` endpoint and retries cancellation of an unused order on failure
 - Deduplicates credential rows and stored accounts by normalized email
 - Clicks through the consent page
-- Completes a dashboard-owned OAuth callback, or writes standalone results to the helper's legacy store
+- Completes a dashboard-owned OAuth callback or writes directly to the current TypeScript plugin store
 
 ### Prerequisites
 
@@ -277,7 +277,7 @@ uv run playwright install chromium
          "service": 671,
          "pricing_option": 0,
          "max_price": "0.50",
-          "timeout_seconds": 60,
+          "timeout_seconds": 180,
           "max_orders": 3
        }
      },
@@ -334,7 +334,7 @@ uv run playwright install chromium
    Optional environment overrides are `SMSPOOL_COUNTRY`, `SMSPOOL_SERVICE`,
    `SMSPOOL_POOL`, `SMSPOOL_MAX_PRICE`, `SMSPOOL_PRICING_OPTION`,
    `SMSPOOL_AREA_CODE`, `SMSPOOL_EXCLUDE`, `SMSPOOL_TIMEOUT`, and
-   `SMSPOOL_MAX_ORDERS`. Each order is hard-capped at 60 seconds; the script
+   `SMSPOOL_MAX_ORDERS`. Each order is hard-capped at 180 seconds; the script
    confirms cancellation/refund before trying a different number.
 
 ### Usage
@@ -369,11 +369,13 @@ uv run --with 'python-dotenv>=1.2.1,<2' \
   python -m unittest auto-login/test_auto_login.py
 ```
 
-Standalone direct-store mode still writes the helper's legacy file at
-`~/.config/opencode/opencode-multi-auth-codex-accounts.json`, whose schema is
-not the current TypeScript plugin store. Prefer `/codex`,
-`opencode-multi-auth add`, or dashboard-assisted auto-login when the account
-must appear in `~/.config/opencode-multi-auth/accounts.json`.
+Standalone direct-store mode writes the current v2 store at
+`~/.config/opencode-multi-auth/accounts.json` and honors
+`OPENCODE_MULTI_AUTH_STORE_DIR` / `OPENCODE_MULTI_AUTH_STORE_FILE`. Existing
+accounts from the former
+`~/.config/opencode/opencode-multi-auth-codex-accounts.json` array store are
+merged by normalized email. For an encrypted store, use `/codex`, the plugin
+CLI, or dashboard-assisted auto-login instead of direct Python writes.
 
 ### How it works
 
@@ -390,14 +392,16 @@ OpenAI Auth                    Outlook Web                  Local Server
     |  ----redirect callback-----> | ----code via HTTP GET----> |
     |                              |                            |  7. Capture code
     |                              |                            |  8. Exchange for tokens
-    |                              |                            |  9. Complete dashboard callback or legacy standalone write
+    |                              |                            |  9. Complete dashboard callback or current-store write
 ```
 
 The script generates a PKCE challenge compatible with the OAuth flow. In
 dashboard-assisted mode, TypeScript owns the callback and updates the current
 plugin store. In standalone mode, Python starts a local server on port `1455`
-and writes its legacy store format; that file is not interchangeable with the
-current TypeScript store.
+and writes the same v2 account-map schema used by the TypeScript plugin. Legacy
+array-store accounts are imported idempotently without replacing an existing
+email entry. A standalone account without an explicit alias receives the next
+available `codex-NN` name.
 
 ### Microsoft interstitials
 

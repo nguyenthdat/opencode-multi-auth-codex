@@ -1,9 +1,10 @@
 import importlib.util
+import json
 import os
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 
 MODULE_PATH = Path(__file__).with_name("auto_login.py")
@@ -71,6 +72,173 @@ class EnvironmentTests(unittest.TestCase):
                 self.assertTrue(auto_login.load_environment(env_file))
                 self.assertEqual(os.environ["SMSPOOL_API_KEY"], "from-file")
                 self.assertNotIn("GITHUB_TOKEN", os.environ)
+
+
+class StoreTests(unittest.TestCase):
+    def test_writes_current_store_schema_and_preserves_existing_metadata(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store_file = Path(directory) / "store" / "accounts.json"
+            legacy_file = Path(directory) / "legacy.json"
+            tokens = {
+                "access_token": "access-one",
+                "refresh_token": "refresh-one",
+                "id_token": "id-one",
+                "expires_in": 3600,
+            }
+            claims = [
+                {"exp": 2_000_000_000},
+                {
+                    "email": "New.User@example.com",
+                    "https://api.openai.com/auth": {"chatgpt_account_id": "account-id"},
+                },
+            ]
+
+            with (
+                patch.object(auto_login, "STORE_FILE", store_file),
+                patch.object(auto_login, "LEGACY_STORE_FILE", legacy_file),
+                patch.object(auto_login, "decode_jwt_payload", side_effect=claims),
+            ):
+                email, alias, is_new = auto_login.add_account_to_store(
+                    tokens, "Team Primary"
+                )
+
+            saved = json.loads(store_file.read_text(encoding="utf-8"))
+            self.assertEqual(
+                (email, alias, is_new), ("New.User@example.com", "team-primary", True)
+            )
+            self.assertEqual(saved["version"], 2)
+            self.assertEqual(saved["activeAlias"], "team-primary")
+            self.assertIsInstance(saved["accounts"], dict)
+            self.assertEqual(
+                saved["accounts"]["team-primary"]["refreshToken"], "refresh-one"
+            )
+
+            saved["accounts"]["team-primary"].update(
+                {
+                    "usageCount": 7,
+                    "enabled": False,
+                    "tags": ["work"],
+                    "notes": "Keep me",
+                    "rateLimitHistory": [{"at": 1}],
+                }
+            )
+            store_file.write_text(json.dumps(saved), encoding="utf-8")
+            updated_tokens = {**tokens, "access_token": "access-two"}
+            with (
+                patch.object(auto_login, "STORE_FILE", store_file),
+                patch.object(auto_login, "LEGACY_STORE_FILE", legacy_file),
+                patch.object(auto_login, "decode_jwt_payload", side_effect=claims),
+            ):
+                _, updated_alias, updated_is_new = auto_login.add_account_to_store(
+                    updated_tokens, "ignored-new-alias"
+                )
+
+            updated = json.loads(store_file.read_text(encoding="utf-8"))["accounts"][
+                "team-primary"
+            ]
+            self.assertEqual((updated_alias, updated_is_new), ("team-primary", False))
+            self.assertEqual(updated["accessToken"], "access-two")
+            self.assertEqual(updated["usageCount"], 7)
+            self.assertFalse(updated["enabled"])
+            self.assertEqual(updated["tags"], ["work"])
+            self.assertEqual(updated["notes"], "Keep me")
+            self.assertEqual(updated["rateLimitHistory"], [{"at": 1}])
+
+    def test_migrates_legacy_array_store_idempotently(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store_file = Path(directory) / "current" / "accounts.json"
+            legacy_file = Path(directory) / "legacy.json"
+            store_file.parent.mkdir(parents=True)
+            store_file.write_text(
+                json.dumps(
+                    {
+                        "version": 2,
+                        "accounts": {
+                            "primary": {
+                                "alias": "primary",
+                                "email": "primary@example.com",
+                                "accessToken": "current-access",
+                                "refreshToken": "current-refresh",
+                                "expiresAt": 2_000_000_000_000,
+                                "usageCount": 9,
+                            }
+                        },
+                        "activeAlias": "primary",
+                        "rotationIndex": 0,
+                        "lastRotation": 1,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            legacy_file.write_text(
+                json.dumps(
+                    {
+                        "version": 2,
+                        "accounts": [
+                            {
+                                "email": "new.account@example.com",
+                                "accessToken": "legacy-access",
+                                "refreshToken": "legacy-refresh",
+                                "expiresAt": 2_000_000_000_000,
+                                "usageCount": 0,
+                            }
+                        ],
+                        "activeIndex": 0,
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with (
+                patch.object(auto_login, "STORE_FILE", store_file),
+                patch.object(auto_login, "LEGACY_STORE_FILE", legacy_file),
+                patch("builtins.print"),
+            ):
+                first = auto_login.load_store()
+                second = auto_login.load_store()
+
+            self.assertEqual(set(first["accounts"]), {"primary", "codex-01"})
+            self.assertEqual(set(second["accounts"]), {"primary", "codex-01"})
+            self.assertEqual(second["activeAlias"], "primary")
+            self.assertEqual(second["accounts"]["primary"]["usageCount"], 9)
+
+    def test_rejects_encrypted_store_without_mutating_it(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store_file = Path(directory) / "accounts.json"
+            legacy_file = Path(directory) / "legacy.json"
+            encrypted = {"encrypted": True, "version": 2, "data": "ciphertext"}
+            store_file.write_text(json.dumps(encrypted), encoding="utf-8")
+
+            with (
+                patch.object(auto_login, "STORE_FILE", store_file),
+                patch.object(auto_login, "LEGACY_STORE_FILE", legacy_file),
+            ):
+                with self.assertRaisesRegex(RuntimeError, "store is encrypted"):
+                    auto_login.load_store()
+
+            self.assertEqual(
+                json.loads(store_file.read_text(encoding="utf-8")), encrypted
+            )
+
+
+class BrowserElementTests(unittest.TestCase):
+    def test_wait_and_click_requires_an_element(self):
+        page = Mock()
+        page.wait_for_selector.return_value = None
+
+        with self.assertRaisesRegex(RuntimeError, "Element did not appear"):
+            auto_login._wait_and_click(page, "button")
+
+    def test_wait_and_click_clicks_the_resolved_element(self):
+        page = Mock()
+        element = Mock()
+        page.wait_for_selector.return_value = element
+
+        returned = auto_login._wait_and_click(page, "button", timeout=123)
+
+        page.wait_for_selector.assert_called_once_with("button", timeout=123)
+        element.click.assert_called_once_with()
+        self.assertIs(returned, element)
 
 
 class TotpTests(unittest.TestCase):
@@ -203,7 +371,7 @@ class SmsPoolTests(unittest.TestCase):
             self.assertTrue(auto_login.cancel_smspool_order("ABCDEFGH", "api-key"))
         self.assertEqual(request.call_count, 2)
 
-    def test_phone_challenge_refunds_after_sixty_seconds_and_requests_restart(self):
+    def test_phone_challenge_refunds_after_timeout_and_requests_restart(self):
         class FakePage:
             def wait_for_timeout(self, _milliseconds):
                 pass
@@ -243,7 +411,10 @@ class SmsPoolTests(unittest.TestCase):
 
         self.assertEqual(cancel.call_args.args[0], "ORDER001")
         self.assertEqual(attempted_numbers, {"+15550000001"})
-        self.assertEqual(wait_for_sms.call_args.kwargs["timeout_seconds"], 60)
+        self.assertEqual(
+            wait_for_sms.call_args.kwargs["timeout_seconds"],
+            auto_login.SMSPOOL_DEFAULT_TIMEOUT,
+        )
 
     def test_login_restarts_oauth_and_keeps_attempted_phone_numbers(self):
         calls = 0
