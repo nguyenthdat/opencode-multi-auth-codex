@@ -399,7 +399,6 @@ const tui = async (api, options) => {
     if (options?.enabled === false)
         return;
     api.keymap.registerLayer({
-        mode: 'base',
         commands: [
             {
                 name: 'multi-auth.accounts',

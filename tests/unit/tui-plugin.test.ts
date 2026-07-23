@@ -22,10 +22,10 @@ interface SelectDialogProps {
 
 describe('OpenCode TUI plugin', () => {
   it('registers account management slash commands', async () => {
-    const layers: Array<{ commands?: TestCommand[] }> = []
+    const layers: Array<{ mode?: string; commands?: TestCommand[] }> = []
     const api = {
       keymap: {
-        registerLayer(layer: { commands?: TestCommand[] }) {
+        registerLayer(layer: { mode?: string; commands?: TestCommand[] }) {
           layers.push(layer)
           return () => undefined
         }
@@ -36,6 +36,7 @@ describe('OpenCode TUI plugin', () => {
 
     expect(plugin.id).toBe('@nguyenthdat/opencode-multi-auth-codex')
     expect(layers).toHaveLength(1)
+    expect(layers[0].mode).toBeUndefined()
     expect(layers[0].commands).toEqual(expect.arrayContaining([
       expect.objectContaining({
         name: 'multi-auth.accounts',
