@@ -11,3 +11,5 @@ node
 auto-login/credentials.json
 auto-login/debug_*.png
 auto-login/__pycache__/
+.cloakbrowser-artifacts/
+.venv/
