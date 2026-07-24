@@ -48,7 +48,7 @@
   "peerDependencies": {
     "@opencode-ai/plugin": "^1.18.4",
     "@opentui/solid": ">=0.4.5",
-    "solid-js": "1.9.12"
+    "solid-js": "1.9.14"
   },
   "peerDependenciesMeta": {
     "@opencode-ai/plugin": {
@@ -76,7 +76,7 @@
     "prettier": "3.9.6",
     "react": "19.2.7",
     "react-dom": "19.2.7",
-    "solid-js": "1.9.12",
+    "solid-js": "1.9.14",
     "typescript": "^5.9.3"
   },
   "files": [
