@@ -822,6 +822,30 @@ class BrowserElementTests(unittest.TestCase):
 
         self.assertNotIn("sensitive-secret", str(error.exception))
 
+    def test_human_type_accepts_browser_formatted_phone_value(self):
+        class FormattedPhoneInput(self.FakeInput):
+            def type(self, value, *, delay):
+                self.value = "(555) 000-6961"
+
+        element = FormattedPhoneInput()
+
+        auto_login._human_type(
+            element,
+            "+15550006961",
+            verification="phone",
+        )
+
+        self.assertEqual(element.fill_calls, [""])
+
+    def test_phone_verification_rejects_unrelated_number(self):
+        self.assertFalse(
+            auto_login._input_value_matches(
+                "(646) 555-1234",
+                "+12125551234",
+                "phone",
+            )
+        )
+
     def test_wait_and_click_requires_an_element(self):
         page = Mock()
         page.wait_for_selector.return_value = None
@@ -840,6 +864,17 @@ class BrowserElementTests(unittest.TestCase):
         element.click.assert_called_once_with()
         self.assertIs(returned, element)
 
+    def test_first_visible_skips_hidden_duplicate_matches(self):
+        page = Mock()
+        hidden = Mock()
+        visible = Mock()
+        hidden.is_visible.return_value = False
+        visible.is_visible.return_value = True
+        page.query_selector_all.return_value = [hidden, visible]
+
+        self.assertIs(auto_login._first_visible(page, ["input[name='code']"]), visible)
+        page.query_selector.assert_not_called()
+
 
 class TotpTests(unittest.TestCase):
     def test_matches_rfc_6238_sha1_vector(self):
@@ -851,6 +886,119 @@ class TotpTests(unittest.TestCase):
         grouped = auto_login.generate_totp("JBSW Y3DP-EHPK 3PXP", timestamp=1234567890)
         self.assertEqual(grouped, compact)
 
+    def test_generic_mfa_url_without_authenticator_ui_is_not_a_totp_challenge(self):
+        page = Mock()
+        page.url = "https://auth.openai.com/mfa"
+        page.inner_text.return_value = "Verify your identity"
+        page.query_selector.return_value = None
+
+        self.assertFalse(auto_login._is_totp_challenge(page))
+
+    def test_visible_authenticator_method_is_a_totp_challenge(self):
+        page = Mock()
+        page.url = "https://auth.openai.com/mfa"
+        page.inner_text.return_value = "Choose a verification method"
+        method = Mock()
+        method.is_visible.return_value = True
+        page.query_selector.side_effect = lambda selector: (
+            method if "Authenticator app" in selector else None
+        )
+
+        self.assertTrue(auto_login._is_totp_challenge(page))
+
+    def test_existing_code_widget_on_totp_mfa_url_is_a_totp_challenge(self):
+        page = Mock()
+        page.url = "https://auth.openai.com/mfa/totp"
+        page.inner_text.return_value = "Enter your verification code"
+        code_input = Mock()
+        code_input.is_visible.return_value = True
+        page.query_selector_all.side_effect = lambda selector: (
+            [code_input] if "autocomplete='one-time-code'" in selector else []
+        )
+        page.query_selector.return_value = None
+
+        self.assertTrue(auto_login._is_totp_challenge(page))
+
+    def test_email_code_widget_on_mfa_url_is_not_a_totp_challenge(self):
+        page = Mock()
+        page.url = "https://auth.openai.com/mfa"
+        page.inner_text.return_value = "We sent to your email. Check your inbox."
+        code_input = Mock()
+        code_input.is_visible.return_value = True
+        page.query_selector_all.side_effect = lambda selector: (
+            [code_input] if "autocomplete='one-time-code'" in selector else []
+        )
+        page.query_selector.return_value = None
+
+        self.assertFalse(auto_login._is_totp_challenge(page))
+
+    def test_selects_authenticator_after_try_another_method(self):
+        page = Mock()
+        other_method = Mock()
+        authenticator_method = Mock()
+        code_input = Mock()
+        with (
+            patch.object(
+                auto_login,
+                "_first_visible",
+                side_effect=[None, other_method],
+            ),
+            patch.object(
+                auto_login,
+                "_wait_for_visible",
+                return_value=authenticator_method,
+            ),
+            patch.object(
+                auto_login,
+                "_wait_for_totp_code_input",
+                side_effect=[None, code_input],
+            ),
+        ):
+            self.assertTrue(auto_login._select_totp_method(page))
+
+        other_method.click.assert_called_once_with()
+        authenticator_method.click.assert_called_once_with()
+
+    def test_authenticator_method_wins_over_existing_email_code_input(self):
+        page = Mock()
+        authenticator_method = Mock()
+        code_input = Mock()
+        with (
+            patch.object(auto_login, "_first_visible", return_value=authenticator_method),
+            patch.object(auto_login, "_wait_for_totp_code_input", return_value=code_input),
+        ):
+            self.assertTrue(auto_login._select_totp_method(page))
+
+        authenticator_method.click.assert_called_once_with()
+
+    def test_totp_allows_code_widget_to_auto_submit(self):
+        page = Mock()
+        attempted = set()
+        with (
+            patch.object(auto_login, "_is_totp_challenge", side_effect=[True, False]),
+            patch.object(auto_login, "_select_totp_method", return_value=True),
+            patch.object(auto_login, "_fill_verification_code"),
+            patch.object(auto_login, "_submit_verification_form", return_value=False),
+            patch.object(auto_login.time, "time", return_value=100),
+            patch("builtins.print"),
+        ):
+            self.assertTrue(auto_login.handle_totp_challenge(page, "JBSWY3DPEHPK3PXP", attempted))
+
+        page.wait_for_timeout.assert_called_once_with(5000)
+
+    def test_rejected_auto_submit_totp_returns_false_for_retry(self):
+        page = Mock()
+        attempted = set()
+        with (
+            patch.object(auto_login, "_is_totp_challenge", return_value=True),
+            patch.object(auto_login, "_select_totp_method", return_value=True),
+            patch.object(auto_login, "_fill_verification_code"),
+            patch.object(auto_login, "_submit_verification_form", return_value=False),
+            patch.object(auto_login.time, "time", return_value=100),
+            patch("builtins.print"),
+        ):
+            self.assertFalse(auto_login.handle_totp_challenge(page, "JBSWY3DPEHPK3PXP", attempted))
+
     def test_rejected_totp_waits_for_a_distinct_counter_before_retry(self):
         class FakePage:
             def wait_for_timeout(self, _milliseconds):
@@ -859,6 +1007,7 @@ class TotpTests(unittest.TestCase):
         attempted = set()
         with (
             patch.object(auto_login, "_is_totp_challenge", return_value=True),
+            patch.object(auto_login, "_select_totp_method", return_value=True),
             patch.object(auto_login, "_fill_verification_code"),
             patch.object(auto_login, "_submit_verification_form"),
             patch.object(auto_login.time, "time", side_effect=[100, 100, 100, 121, 121]),

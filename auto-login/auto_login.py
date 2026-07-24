@@ -968,7 +968,20 @@ def _input_value(element):
         return element.evaluate("element => element.value")
 
 
-def _human_type(element, value, delay_ms=85):
+def _input_value_matches(actual, expected, verification):
+    if verification == "exact":
+        return actual == expected
+    if verification == "phone":
+        actual_digits = re.sub(r"\D", "", actual or "")
+        expected_digits = re.sub(r"\D", "", expected)
+        if actual_digits == expected_digits:
+            return True
+        shorter, longer = sorted((actual_digits, expected_digits), key=len)
+        return len(shorter) >= 8 and len(longer) - len(shorter) <= 3 and longer.endswith(shorter)
+    raise ValueError(f"Unknown input verification mode: {verification}")
+
+
+def _human_type(element, value, delay_ms=85, verification="exact"):
     expected = str(value)
     if not expected:
         raise ValueError("Cannot enter an empty value")
@@ -980,11 +993,11 @@ def _human_type(element, value, delay_ms=85):
         element.press("ControlOrMeta+A")
         element.press("Backspace")
     element.type(expected, delay=delay_ms)
-    if _input_value(element) == expected:
+    if _input_value_matches(_input_value(element), expected, verification):
         return
 
     element.fill(expected)
-    if _input_value(element) == expected:
+    if _input_value_matches(_input_value(element), expected, verification):
         return
 
     element.evaluate(
@@ -1002,7 +1015,7 @@ def _human_type(element, value, delay_ms=85):
         """,
         expected,
     )
-    if _input_value(element) != expected:
+    if not _input_value_matches(_input_value(element), expected, verification):
         raise RuntimeError("Input value did not persist after typing")
 
 
@@ -1281,6 +1294,16 @@ def cancel_smspool_order(order_id, api_key, max_attempts=3):
 def _first_visible(page, selectors):
     for selector in selectors:
         try:
+            elements = page.query_selector_all(selector)
+            for element in elements:
+                try:
+                    if element.is_visible():
+                        return element
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        try:
             element = page.query_selector(selector)
             if element and element.is_visible():
                 return element
@@ -1324,6 +1347,95 @@ def _wait_for_sms_code_or_phone_error(page, timeout_ms=30000, email=None):
     return None, None
 
 
+STRICT_VERIFICATION_CODE_SELECTORS = [
+    "input[name='totp']",
+    "input[name='code']",
+    "input[name*='otp' i]",
+    "input[id*='totp' i]",
+    "input[id*='otp' i]",
+    "input[autocomplete='one-time-code']",
+    "input[inputmode='numeric']",
+    "input[maxlength='6']",
+    "input[placeholder='000000']",
+    "input[placeholder*='code' i]",
+    "input[aria-label*='code' i]",
+    "input[maxlength='1']",
+    "input[maxlength='1'][inputmode='numeric']",
+    "input[data-slot*='otp']",
+    "input[data-testid*='digit']",
+]
+VERIFICATION_CODE_SELECTORS = [
+    *STRICT_VERIFICATION_CODE_SELECTORS,
+    "input[type='text'], input[type='number'], input:not([type])",
+]
+TOTP_METHOD_SELECTORS = [
+    "button:has-text('Authenticator app')",
+    "a:has-text('Authenticator app')",
+    "[role='button']:has-text('Authenticator app')",
+    "button:has-text('Authentication app')",
+    "a:has-text('Authentication app')",
+    "[role='button']:has-text('Authentication app')",
+]
+
+
+def _has_totp_page_context(page):
+    try:
+        body = page.inner_text("body").lower()
+        current_url = page.url.lower()
+    except Exception:
+        return False
+    return any(
+        marker in body
+        for marker in (
+            "authenticator app",
+            "authentication app",
+            "two-factor authentication",
+            "two factor authentication",
+            "2-step verification",
+            "2fa code",
+        )
+    ) or any(marker in current_url for marker in ("totp", "authenticator", "two-factor"))
+
+
+def _wait_for_totp_code_input(page, timeout_ms=10000, require_context=True):
+    deadline = time.time() + timeout_ms / 1000
+    while time.time() < deadline:
+        method_selector_visible = _first_visible(page, TOTP_METHOD_SELECTORS)
+        context_ready = not require_context or _has_totp_page_context(page)
+        if not method_selector_visible and context_ready:
+            code_input = _first_visible(page, STRICT_VERIFICATION_CODE_SELECTORS)
+            if code_input:
+                return code_input
+        page.wait_for_timeout(250)
+    return None
+
+
+def _select_totp_method(page, accept_existing_input=True):
+    method = _first_visible(page, TOTP_METHOD_SELECTORS)
+    if not method and accept_existing_input:
+        if _wait_for_totp_code_input(page, timeout_ms=1000):
+            return True
+    if not method:
+        other_method = _first_visible(
+            page,
+            [
+                "button:has-text('Try another method')",
+                "a:has-text('Try another method')",
+                "[role='button']:has-text('Try another method')",
+                "button:has-text('Use another method')",
+                "a:has-text('Use another method')",
+            ],
+        )
+        if other_method:
+            other_method.click()
+            method = _wait_for_visible(page, TOTP_METHOD_SELECTORS, timeout_ms=10000)
+    if not method:
+        return False
+    method.click()
+    page.wait_for_timeout(500)
+    return bool(_wait_for_totp_code_input(page, timeout_ms=10000, require_context=False))
+
+
 def _fill_verification_code(page, code):
     digit_inputs = []
     try:
@@ -1343,20 +1455,14 @@ def _fill_verification_code(page, code):
 
     code_input = _wait_for_visible(
         page,
-        [
-            "input[name='totp']",
-            "input[name='code']",
-            "input[autocomplete='one-time-code']",
-            "input[inputmode='numeric']",
-            "input[placeholder*='code' i]",
-        ],
+        VERIFICATION_CODE_SELECTORS,
     )
     if not code_input:
         raise RuntimeError("Verification code input was not found")
     _human_type(code_input, code, delay_ms=110)
 
 
-def _submit_verification_form(page):
+def _submit_verification_form(page, required=True):
     submit = _first_visible(
         page,
         [
@@ -1368,31 +1474,22 @@ def _submit_verification_form(page):
         ],
     )
     if not submit:
-        raise RuntimeError("Verification submit button was not found")
+        if required:
+            raise RuntimeError("Verification submit button was not found")
+        return False
     submit.click()
+    return True
 
 
 def _is_totp_challenge(page):
-    try:
-        body = page.inner_text("body").lower()
-        current_url = page.url.lower()
-    except Exception:
-        return False
-    return any(
-        marker in body
-        for marker in (
-            "authenticator app",
-            "two-factor authentication",
-            "two factor authentication",
-            "2-step verification",
-            "2fa code",
-        )
-    ) or any(marker in current_url for marker in ("/mfa", "totp", "two-factor"))
+    has_authenticator_method = bool(_first_visible(page, TOTP_METHOD_SELECTORS))
+    return has_authenticator_method or _has_totp_page_context(page)
 
 
-def handle_totp_challenge(page, totp_secret, attempted_counters=None):
+def handle_totp_challenge(page, totp_secret, attempted_counters=None, email=None):
     if not _is_totp_challenge(page):
-        return False
+        if not totp_secret or not _select_totp_method(page, accept_existing_input=False):
+            return False
     if not totp_secret:
         raise RuntimeError("This account requires TOTP but no 2FA secret was provided")
 
@@ -1411,8 +1508,17 @@ def handle_totp_challenge(page, totp_secret, attempted_counters=None):
 
     code = generate_totp(totp_secret)
     print("  [3/5] Entering authenticator code...")
-    _fill_verification_code(page, code)
-    _submit_verification_form(page)
+    if not _select_totp_method(page):
+        if email:
+            _save_debug_screenshot_page(page, email, "totp_input")
+        raise RuntimeError("Verification code input was not found")
+    try:
+        _fill_verification_code(page, code)
+    except RuntimeError:
+        if email:
+            _save_debug_screenshot_page(page, email, "totp_input")
+        raise
+    _submit_verification_form(page, required=False)
     page.wait_for_timeout(5000)
     if _is_totp_challenge(page):
         print("  [WARNING] Authenticator code was not accepted; retrying if time allows.")
@@ -1475,7 +1581,7 @@ def handle_smspool_phone_challenge(page, config=None, attempted_numbers=None, em
         attempted_numbers.add(phone)
 
         print(f"  [4/5] Entering SMSPool number ending in {phone[-4:]}...")
-        _human_type(phone_input, phone)
+        _human_type(phone_input, phone, verification="phone")
         _submit_verification_form(page)
         code_input, validation_error = _wait_for_sms_code_or_phone_error(page, email=email)
         if not code_input:
@@ -2258,7 +2364,9 @@ def login_account(
                     raise RuntimeError(f"Password step failed: {e}")
 
         if not _has_callback():
-            totp_done = handle_totp_challenge(page, totp_secret, totp_attempted_counters)
+            totp_done = handle_totp_challenge(
+                page, totp_secret, totp_attempted_counters, email=email
+            )
             _raise_if_account_deactivated(page, email)
 
         # ── Step 4: Handle email verification (after password login)
@@ -2305,7 +2413,9 @@ def login_account(
                         _raise_if_account_deactivated(page, email)
 
         if not _has_callback() and not totp_done:
-            totp_done = handle_totp_challenge(page, totp_secret, totp_attempted_counters)
+            totp_done = handle_totp_challenge(
+                page, totp_secret, totp_attempted_counters, email=email
+            )
             _raise_if_account_deactivated(page, email)
         if not _has_callback():
             phone_verification_done = handle_smspool_phone_challenge(
@@ -2376,7 +2486,9 @@ def login_account(
                 or (not external_callback and not CallbackServer.captured_codes)
             ):
                 if not totp_done:
-                    totp_done = handle_totp_challenge(page, totp_secret, totp_attempted_counters)
+                    totp_done = handle_totp_challenge(
+                        page, totp_secret, totp_attempted_counters, email=email
+                    )
                     _raise_if_account_deactivated(page, email)
                 if not phone_verification_done:
                     phone_verification_done = handle_smspool_phone_challenge(
