@@ -203,6 +203,31 @@ describe('web server hardening', () => {
     }
   })
 
+  it('reports whether an account has a matching enabled auto-login credential', async () => {
+    const port = await getFreePort()
+    const server = startWebConsole({ host: '127.0.0.1', port })
+
+    try {
+      await once(server, 'listening')
+      const response = await fetch(`http://127.0.0.1:${port}/api/state`)
+
+      expect(response.status).toBe(200)
+      const payload = (await response.json()) as {
+        accounts?: Array<{ alias?: string; autoLoginAvailable?: boolean }>
+      }
+      expect(payload.accounts?.find((account) => account.alias === 'codex-01')).toMatchObject({
+        autoLoginAvailable: true
+      })
+
+      const serialized = JSON.stringify(payload)
+      expect(serialized).not.toContain('chatgpt_password')
+      expect(serialized).not.toContain('placeholder')
+    } finally {
+      await closeServer(server)
+      fs.unwatchFile(getCodexAuthPath())
+    }
+  })
+
   it('does not rewrite saved credentials when auto-add email already exists', async () => {
     const port = await getFreePort()
     const server = startWebConsole({ host: '127.0.0.1', port })

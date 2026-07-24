@@ -103,6 +103,8 @@ describe('dashboard headless smoke', () => {
       expect(script).toContain('Dashboard root element not found')
       expect(script).toContain('Codex account control')
       expect(script).toContain('Force update')
+      expect(script).toContain('Auto re-authentication started')
+      expect(script).toContain('Authentication token is invalid')
 
       const styleResponse = await fetch(`http://127.0.0.1:${port}/dashboard.css`)
       expect(styleResponse.status).toBe(200)

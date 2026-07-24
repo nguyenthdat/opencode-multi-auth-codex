@@ -57,7 +57,13 @@ class EnvironmentTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             env_file = Path(directory) / ".env"
             env_file.write_text(
-                "SMSPOOL_API_KEY=from-file\nGITHUB_TOKEN=must-not-load\n",
+                "SMSPOOL_API_KEY=from-file\n"
+                "OPENCODE_MULTI_AUTH_PROXY=socks5://proxy.example.com:1080\n"
+                "OPENCODE_MULTI_AUTH_PROXY_USERNAME=proxy-user\n"
+                "OPENCODE_MULTI_AUTH_PROXY_PASSWORD=proxy-password\n"
+                "OPENCODE_MULTI_AUTH_DEACTIVATED_FILE=/private/deactivated.json\n"
+                "PROXY=must-not-load\n"
+                "GITHUB_TOKEN=must-not-load\n",
                 encoding="utf-8",
             )
             env_file.chmod(0o600)
@@ -69,7 +75,93 @@ class EnvironmentTests(unittest.TestCase):
             with patch.dict(os.environ, {}, clear=True):
                 self.assertTrue(auto_login.load_environment(env_file))
                 self.assertEqual(os.environ["SMSPOOL_API_KEY"], "from-file")
+                self.assertEqual(
+                    os.environ["OPENCODE_MULTI_AUTH_PROXY"],
+                    "socks5://proxy.example.com:1080",
+                )
+                self.assertEqual(
+                    os.environ["OPENCODE_MULTI_AUTH_DEACTIVATED_FILE"],
+                    "/private/deactivated.json",
+                )
+                self.assertNotIn("PROXY", os.environ)
                 self.assertNotIn("GITHUB_TOKEN", os.environ)
+
+
+class ProxyConfigTests(unittest.TestCase):
+    def test_builds_authenticated_http_proxy_and_enforces_local_bypass(self):
+        with patch.dict(
+            os.environ,
+            {
+                "OPENCODE_MULTI_AUTH_PROXY": "http://proxy.example.com:3128",
+                "OPENCODE_MULTI_AUTH_PROXY_USERNAME": "proxy-user",
+                "OPENCODE_MULTI_AUTH_PROXY_PASSWORD": "proxy-password",
+                "OPENCODE_MULTI_AUTH_PROXY_BYPASS": "internal.example",
+            },
+            clear=True,
+        ):
+            config = auto_login.build_proxy_config()
+
+        self.assertEqual(config["server"], "http://proxy.example.com:3128")
+        self.assertEqual(config["username"], "proxy-user")
+        self.assertEqual(config["password"], "proxy-password")
+        self.assertEqual(
+            config["bypass"],
+            "internal.example,localhost,127.0.0.1,::1",
+        )
+
+    def test_cli_values_override_proxy_environment(self):
+        with patch.dict(
+            os.environ,
+            {
+                "OPENCODE_MULTI_AUTH_PROXY": "http://environment.example:3128",
+                "OPENCODE_MULTI_AUTH_PROXY_USERNAME": "proxy-user",
+                "OPENCODE_MULTI_AUTH_PROXY_PASSWORD": "proxy-password",
+            },
+            clear=True,
+        ):
+            config = auto_login.build_proxy_config(
+                server="http://override.example:8080",
+                bypass="localhost",
+            )
+
+        self.assertEqual(config["server"], "http://override.example:8080")
+        self.assertEqual(config["bypass"], "localhost,127.0.0.1,::1")
+
+    def test_rejects_credentials_embedded_in_proxy_url(self):
+        with self.assertRaisesRegex(ValueError, "dedicated username/password"):
+            auto_login.build_proxy_config(
+                server="socks5://user:password@proxy.example.com:1080",
+                username="user",
+                password="password",
+            )
+
+    def test_requires_proxy_username_and_password_together(self):
+        with self.assertRaisesRegex(ValueError, "configured together"):
+            auto_login.build_proxy_config(
+                server="socks5://proxy.example.com:1080",
+                username="proxy-user",
+                password="",
+            )
+
+    def test_rejects_authenticated_socks5_proxy_for_chromium(self):
+        with self.assertRaisesRegex(ValueError, "authenticated HTTP proxy"):
+            auto_login.build_proxy_config(
+                server="socks5://proxy.example.com:1080",
+                username="proxy-user",
+                password="proxy-password",
+            )
+
+    def test_allows_unauthenticated_socks5_proxy(self):
+        with patch.dict(os.environ, {}, clear=True):
+            config = auto_login.build_proxy_config(server="socks5://proxy.example.com:1080")
+
+        self.assertEqual(config["server"], "socks5://proxy.example.com:1080")
+        self.assertNotIn("username", config)
+        self.assertNotIn("password", config)
+
+    def test_rejects_unsupported_proxy_scheme(self):
+        with self.assertRaisesRegex(ValueError, "Unsupported proxy scheme"):
+            auto_login.build_proxy_config(server="ftp://proxy.example.com:21")
 
 
 class StoreTests(unittest.TestCase):
@@ -222,6 +314,380 @@ class StoreTests(unittest.TestCase):
             self.assertEqual(json.loads(store_file.read_text(encoding="utf-8")), encrypted)
 
 
+class DeactivatedAccountTests(unittest.TestCase):
+    def test_detects_account_deactivated_error_page(self):
+        page = Mock()
+        page.url = "https://auth.openai.com/error"
+        page.inner_text.return_value = (
+            "Authentication Error\n"
+            "You do not have an account because it has been deleted or deactivated.\n"
+            "error_code: account_deactivated"
+        )
+
+        self.assertTrue(auto_login._is_account_deactivated(page))
+
+    def test_quarantine_removes_pipe_credential_and_plaintext_store_account(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            credentials_file = root / "accounts.txt"
+            deactivated_file = root / "deactivated.json"
+            store_file = root / "store" / "accounts.json"
+            legacy_file = root / "legacy.json"
+            credentials_file.write_text(
+                "|email|password|2mfa secret key|\n"
+                "|deactivated@example.com|sensitive-password|SENSITIVE-TOTP|\n"
+                "|active@example.com|active-password|ACTIVE-TOTP|\n",
+                encoding="utf-8",
+            )
+            store_file.parent.mkdir(parents=True)
+            store_file.write_text(
+                json.dumps(
+                    {
+                        "version": 2,
+                        "accounts": {
+                            "deactivated": {
+                                "alias": "deactivated",
+                                "email": "deactivated@example.com",
+                                "accessToken": "access",
+                                "refreshToken": "refresh",
+                                "expiresAt": 2_000_000_000_000,
+                                "usageCount": 0,
+                            },
+                            "active": {
+                                "alias": "active",
+                                "email": "active@example.com",
+                                "accessToken": "active-access",
+                                "refreshToken": "active-refresh",
+                                "expiresAt": 2_000_000_000_000,
+                                "usageCount": 0,
+                            },
+                        },
+                        "activeAlias": "deactivated",
+                        "rotationIndex": 0,
+                        "lastRotation": 1,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            legacy_file.write_text(
+                json.dumps(
+                    {
+                        "version": 2,
+                        "accounts": [
+                            {
+                                "email": "deactivated@example.com",
+                                "accessToken": "legacy-access",
+                                "refreshToken": "legacy-refresh",
+                                "expiresAt": 2_000_000_000_000,
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with (
+                patch.object(auto_login, "STORE_FILE", store_file),
+                patch.object(auto_login, "LEGACY_STORE_FILE", legacy_file),
+            ):
+                result = auto_login.quarantine_deactivated_account(
+                    "DEACTIVATED@example.com",
+                    credentials_path=credentials_file,
+                    deactivated_path=deactivated_file,
+                )
+
+            quarantine_text = deactivated_file.read_text(encoding="utf-8")
+            remaining_credentials = credentials_file.read_text(encoding="utf-8")
+            saved_store = json.loads(store_file.read_text(encoding="utf-8"))
+            saved_legacy = json.loads(legacy_file.read_text(encoding="utf-8"))
+            self.assertTrue(result["credentialRemoved"])
+            self.assertEqual(result["storeAlias"], "deactivated")
+            self.assertIn("deactivated@example.com", quarantine_text.lower())
+            self.assertNotIn("sensitive-password", quarantine_text)
+            self.assertNotIn("SENSITIVE-TOTP", quarantine_text)
+            self.assertNotIn("deactivated@example.com", remaining_credentials)
+            self.assertIn("active@example.com", remaining_credentials)
+            self.assertNotIn("deactivated", saved_store["accounts"])
+            self.assertEqual(saved_store["activeAlias"], "active")
+            self.assertEqual(saved_legacy["accounts"], [])
+            saved_backup = json.loads(
+                store_file.with_suffix(".json.bak").read_text(encoding="utf-8")
+            )
+            self.assertNotIn("deactivated", saved_backup["accounts"])
+            self.assertIn("active", saved_backup["accounts"])
+            if os.name != "nt":
+                self.assertEqual(deactivated_file.stat().st_mode & 0o077, 0)
+                self.assertEqual(credentials_file.stat().st_mode & 0o077, 0)
+
+    def test_quarantine_removes_json_credential_and_updates_record_idempotently(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            credentials_file = root / "credentials.json"
+            deactivated_file = root / "deactivated.json"
+            credentials_file.write_text(
+                json.dumps(
+                    {
+                        "defaults": {"chatgpt_password": "shared-password"},
+                        "accounts": [
+                            {
+                                "email": "deactivated@example.com",
+                                "chatgpt_password": "account-password",
+                            },
+                            {"email": "active@example.com"},
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            first = auto_login.record_deactivated_account(
+                "deactivated@example.com", deactivated_file
+            )
+            second = auto_login.record_deactivated_account(
+                "DEACTIVATED@example.com", deactivated_file
+            )
+            removed = auto_login.remove_credential_by_email(
+                credentials_file, "deactivated@example.com"
+            )
+
+            record = json.loads(deactivated_file.read_text(encoding="utf-8"))
+            credentials = json.loads(credentials_file.read_text(encoding="utf-8"))
+            self.assertEqual(first, second)
+            self.assertTrue(removed)
+            self.assertEqual(len(record["accounts"]), 1)
+            self.assertEqual(record["accounts"][0]["detections"], 2)
+            self.assertEqual(
+                [account["email"] for account in credentials["accounts"]],
+                ["active@example.com"],
+            )
+            self.assertEqual(credentials["defaults"]["chatgpt_password"], "shared-password")
+
+    def test_pending_cleanup_is_not_skipped_and_retries_later(self):
+        with tempfile.TemporaryDirectory() as directory:
+            deactivated_file = Path(directory) / "deactivated.json"
+            auto_login.record_deactivated_account("pending@example.com", deactivated_file)
+
+            with (
+                patch.object(auto_login, "remove_credential_by_email", return_value=True),
+                patch.object(
+                    auto_login,
+                    "remove_store_account_by_email",
+                    side_effect=RuntimeError("store locked"),
+                ),
+            ):
+                failures = auto_login.retry_pending_deactivated_cleanup(
+                    deactivated_path=deactivated_file
+                )
+
+            self.assertEqual(len(failures), 1)
+            self.assertEqual(
+                auto_login.load_deactivated_emails(deactivated_file),
+                {"pending@example.com"},
+            )
+
+            with (
+                patch.object(auto_login, "remove_credential_by_email", return_value=False),
+                patch.object(auto_login, "remove_store_account_by_email", return_value=None),
+            ):
+                failures = auto_login.retry_pending_deactivated_cleanup(
+                    deactivated_path=deactivated_file
+                )
+
+            self.assertEqual(failures, [])
+            self.assertEqual(
+                auto_login.load_deactivated_emails(deactivated_file),
+                {"pending@example.com"},
+            )
+
+    def test_record_sanitizes_existing_quarantine_content(self):
+        with tempfile.TemporaryDirectory() as directory:
+            deactivated_file = Path(directory) / "deactivated.json"
+            deactivated_file.write_text(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "privateConfig": "must-be-removed",
+                        "accounts": [
+                            {
+                                "email": "deactivated@example.com",
+                                "password": "must-be-removed",
+                                "accessToken": "must-be-removed",
+                                "detections": "invalid",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            auto_login.record_deactivated_account("deactivated@example.com", deactivated_file)
+
+            serialized = deactivated_file.read_text(encoding="utf-8")
+            record = json.loads(serialized)
+            self.assertNotIn("must-be-removed", serialized)
+            self.assertNotIn("privateConfig", record)
+            self.assertEqual(set(record), {"version", "accounts"})
+            self.assertEqual(record["accounts"][0]["detections"], 2)
+
+    def test_rejects_deactivated_file_that_collides_with_credentials(self):
+        with tempfile.TemporaryDirectory() as directory:
+            credentials_file = Path(directory) / "credentials.json"
+            original = json.dumps(
+                {
+                    "accounts": [
+                        {
+                            "email": "deactivated@example.com",
+                            "chatgpt_password": "must-be-preserved",
+                        }
+                    ]
+                }
+            )
+            credentials_file.write_text(original, encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "must be separate"):
+                auto_login.quarantine_deactivated_account(
+                    "deactivated@example.com",
+                    credentials_path=credentials_file,
+                    deactivated_path=credentials_file,
+                )
+
+            self.assertEqual(credentials_file.read_text(encoding="utf-8"), original)
+
+    def test_rejects_hard_link_alias_of_credentials_as_deactivated_file(self):
+        if os.name == "nt":
+            self.skipTest("hard-link path collision assertion")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            credentials_file = root / "credentials.json"
+            deactivated_file = root / "deactivated-hard-link.json"
+            original = json.dumps(
+                {
+                    "accounts": [
+                        {
+                            "email": "deactivated@example.com",
+                            "chatgpt_password": "must-be-preserved",
+                        }
+                    ]
+                }
+            )
+            credentials_file.write_text(original, encoding="utf-8")
+            os.link(credentials_file, deactivated_file)
+
+            with self.assertRaisesRegex(ValueError, "must be separate"):
+                auto_login.quarantine_deactivated_account(
+                    "deactivated@example.com",
+                    credentials_path=credentials_file,
+                    deactivated_path=deactivated_file,
+                )
+
+            self.assertEqual(credentials_file.read_text(encoding="utf-8"), original)
+
+    def test_encrypted_store_does_not_block_credential_quarantine(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            credentials_file = root / "credentials.json"
+            deactivated_file = root / "deactivated.json"
+            store_file = root / "store.json"
+            credentials_file.write_text(
+                json.dumps(
+                    {
+                        "accounts": [
+                            {
+                                "email": "deactivated@example.com",
+                                "chatgpt_password": "must-be-removed",
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            store_file.write_text(
+                json.dumps({"version": 3, "encrypted": True, "payload": "ciphertext"}),
+                encoding="utf-8",
+            )
+            store_file.with_suffix(".json.bak").write_text(
+                json.dumps(
+                    {
+                        "version": 2,
+                        "accounts": {
+                            "deactivated": {
+                                "email": "deactivated@example.com",
+                                "accessToken": "must-be-removed",
+                            },
+                            "active": {
+                                "email": "active@example.com",
+                                "accessToken": "must-be-preserved",
+                            },
+                        },
+                        "activeAlias": "deactivated",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with (
+                patch.object(auto_login, "STORE_FILE", store_file),
+                patch.object(auto_login, "LEGACY_STORE_FILE", root / "legacy.json"),
+            ):
+                auto_login.quarantine_deactivated_account(
+                    "deactivated@example.com",
+                    credentials_path=credentials_file,
+                    deactivated_path=deactivated_file,
+                )
+
+            self.assertNotIn(
+                "deactivated@example.com", credentials_file.read_text(encoding="utf-8")
+            )
+            self.assertEqual(
+                auto_login.load_deactivated_emails(deactivated_file),
+                {"deactivated@example.com"},
+            )
+            backup = json.loads(store_file.with_suffix(".json.bak").read_text(encoding="utf-8"))
+            self.assertNotIn("deactivated", backup["accounts"])
+            self.assertIn("active", backup["accounts"])
+
+    def test_credential_removal_preserves_existing_parent_directory_mode(self):
+        if os.name == "nt":
+            self.skipTest("POSIX permission assertion")
+        with tempfile.TemporaryDirectory() as directory:
+            credentials_dir = Path(directory) / "shared"
+            credentials_dir.mkdir(mode=0o755)
+            credentials_file = credentials_dir / "accounts.txt"
+            credentials_file.write_text(
+                "|email|password|2mfa secret key|\n|deactivated@example.com|password|SECRET|\n",
+                encoding="utf-8",
+            )
+            os.chmod(credentials_dir, 0o755)
+
+            self.assertTrue(
+                auto_login.remove_credential_by_email(credentials_file, "deactivated@example.com")
+            )
+
+            self.assertEqual(credentials_dir.stat().st_mode & 0o777, 0o755)
+
+    def test_cmd_login_skips_email_already_in_deactivated_record(self):
+        account = {
+            "email": "deactivated@example.com",
+            "chatgpt_password": "password",
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            deactivated_file = Path(directory) / "deactivated.json"
+            auto_login.record_deactivated_account(account["email"], deactivated_file)
+            with (
+                patch.object(auto_login, "load_store", return_value={"accounts": {}}),
+                patch.object(auto_login, "login_account") as login,
+                patch("builtins.print"),
+            ):
+                result = auto_login.cmd_login(
+                    [account],
+                    {},
+                    deactivated_path=deactivated_file,
+                )
+
+        self.assertEqual(result, (0, 0))
+        login.assert_not_called()
+
+
 class CommandLoginTests(unittest.TestCase):
     def test_skips_existing_email_before_browser_login(self):
         account = {
@@ -285,6 +751,77 @@ class CommandLoginTests(unittest.TestCase):
 
 
 class BrowserElementTests(unittest.TestCase):
+    class FakeInput:
+        def __init__(self, *, type_persists=True, fill_persists=True, evaluate_persists=True):
+            self.value = ""
+            self.type_persists = type_persists
+            self.fill_persists = fill_persists
+            self.evaluate_persists = evaluate_persists
+            self.fill_calls = []
+            self.evaluate_calls = []
+
+        def click(self):
+            pass
+
+        def press(self, _key):
+            pass
+
+        def type(self, value, *, delay):
+            if self.type_persists:
+                self.value = value
+
+        def fill(self, value):
+            self.fill_calls.append(value)
+            if self.fill_persists:
+                self.value = value
+
+        def input_value(self):
+            return self.value
+
+        def evaluate(self, expression, value=None):
+            self.evaluate_calls.append((expression, value))
+            if value is not None and self.evaluate_persists:
+                self.value = value
+            return self.value
+
+    def test_human_type_keeps_keyboard_input_when_it_persists(self):
+        element = self.FakeInput()
+
+        auto_login._human_type(element, "secret")
+
+        self.assertEqual(element.value, "secret")
+        self.assertEqual(element.fill_calls, [""])
+        self.assertEqual(element.evaluate_calls, [])
+
+    def test_human_type_falls_back_to_fill_when_keyboard_input_is_lost(self):
+        element = self.FakeInput(type_persists=False)
+
+        auto_login._human_type(element, "secret")
+
+        self.assertEqual(element.value, "secret")
+        self.assertEqual(element.fill_calls, ["", "secret"])
+        self.assertEqual(element.evaluate_calls, [])
+
+    def test_human_type_uses_native_setter_when_fill_is_not_retained(self):
+        element = self.FakeInput(type_persists=False, fill_persists=False)
+
+        auto_login._human_type(element, "secret")
+
+        self.assertEqual(element.value, "secret")
+        self.assertEqual(len(element.evaluate_calls), 1)
+
+    def test_human_type_fails_without_exposing_value_when_input_cannot_persist(self):
+        element = self.FakeInput(
+            type_persists=False,
+            fill_persists=False,
+            evaluate_persists=False,
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "did not persist") as error:
+            auto_login._human_type(element, "sensitive-secret")
+
+        self.assertNotIn("sensitive-secret", str(error.exception))
+
     def test_wait_and_click_requires_an_element(self):
         page = Mock()
         page.wait_for_selector.return_value = None
@@ -360,6 +897,35 @@ class SmsPoolTests(unittest.TestCase):
             )
         self.assertIsNone(code_input)
         self.assertEqual(error, "phone number is not valid")
+
+    def test_deactivation_after_phone_submission_is_terminal_and_refunds_order(self):
+        class FakePage:
+            url = "https://auth.openai.com/error"
+
+            def inner_text(self, _selector):
+                return "error_code: account_deactivated"
+
+            def wait_for_timeout(self, _milliseconds):
+                pass
+
+        with (
+            patch.dict(os.environ, {"SMSPOOL_API_KEY": "api-key"}),
+            patch.object(auto_login, "_first_visible", return_value=object()),
+            patch.object(auto_login, "_human_type"),
+            patch.object(auto_login, "_submit_verification_form"),
+            patch.object(
+                auto_login,
+                "purchase_smspool_number",
+                return_value={"order_id": "ORDER001", "phone": "+15550000001"},
+            ),
+            patch.object(auto_login, "cancel_smspool_order", return_value=True) as cancel,
+        ):
+            with self.assertRaises(auto_login.AccountDeactivatedError):
+                auto_login.handle_smspool_phone_challenge(
+                    FakePage(), email="deactivated@example.com"
+                )
+
+        cancel.assert_called_once_with("ORDER001", "api-key")
 
     def test_normalizes_purchase_number(self):
         self.assertEqual(

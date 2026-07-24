@@ -337,7 +337,8 @@ uv run playwright install chromium
    install -m 600 .env.example .env
    ```
 
-   Set `SMSPOOL_API_KEY=...` in `.env`. The script loads only `SMSPOOL_*` keys
+   Set `SMSPOOL_API_KEY=...` in `.env`. The script loads only `SMSPOOL_*`,
+   `OPENCODE_MULTI_AUTH_PROXY*`, and `OPENCODE_MULTI_AUTH_DEACTIVATED_FILE`
    from this file and does not override a value already exported in the shell.
    Optional environment overrides are `SMSPOOL_COUNTRY`, `SMSPOOL_SERVICE`,
    `SMSPOOL_POOL`, `SMSPOOL_MAX_PRICE`, `SMSPOOL_PRICING_OPTION`,
@@ -376,6 +377,15 @@ uv run python auto-login/auto_login.py \
 uv run python auto-login/auto_login.py \
   --credentials-file auto-login/accounts.txt --browser playwright
 
+# Override the configured proxy for one run (credentials remain in .env)
+uv run python auto-login/auto_login.py \
+  --credentials-file auto-login/accounts.txt --browser cloak \
+  --proxy http://proxy.example.com:3128
+
+# Temporarily disable the configured proxy
+uv run python auto-login/auto_login.py \
+  --credentials-file auto-login/accounts.txt --browser cloak --no-proxy
+
 # Run the standalone helper unit tests
 uv run --with 'python-dotenv>=1.2.1,<2' \
   python -m unittest auto-login/test_auto_login.py
@@ -392,6 +402,14 @@ Before opening OAuth, auto-login compares normalized emails against the current
 store and skips matches. Use `--force` only when an existing account's tokens
 must be refreshed. Dashboard-assisted callbacks also require the authenticated
 identity to match the selected credential email before any store write.
+Browser traffic can use an HTTP(S) or SOCKS5 proxy configured in
+`.env`; local callback addresses are always added to the bypass list. Proxy
+credentials are never included in logs. Chromium requires authenticated proxies
+to use HTTP(S); SOCKS5 is supported only without authentication. When OpenAI returns
+`account_deactivated`, the script records only the email and detection metadata
+in `~/.config/opencode-multi-auth/deactivated-accounts.json`, atomically removes
+that credential from the input file, removes a matching plaintext store account,
+and skips quarantined emails on later runs.
 
 ### How it works
 
@@ -490,6 +508,11 @@ Dashboard auto-login endpoints also skip an email already present in the store
 and return `409 AUTO_LOGIN_ACCOUNT_EXISTS`. Send `force: true`, or use the
 dashboard's **Force update** button, to refresh that account explicitly.
 
+Account-level re-auth automatically uses an enabled saved auto-login credential
+when its normalized email matches the selected account. The callback is scoped
+to that alias and rejects a different authenticated email. If no matching saved
+credential is available, the dashboard falls back to the manual OAuth flow.
+
 ## Environment variables
 
 ### Storage and auth
@@ -519,6 +542,10 @@ dashboard's **Force update** button, to refresh that account explicitly.
 
 - `OPENCODE_MULTI_AUTH_BROWSER` -> choose `auto`, `cloak`, or `playwright`
 - `OPENCODE_MULTI_AUTH_NO_SANDBOX=1` -> disable the browser no-sandbox flag where supported
+- `OPENCODE_MULTI_AUTH_PROXY` -> HTTP(S) or SOCKS5 proxy URL for browser traffic
+- `OPENCODE_MULTI_AUTH_PROXY_USERNAME` / `OPENCODE_MULTI_AUTH_PROXY_PASSWORD` -> proxy authentication
+- `OPENCODE_MULTI_AUTH_PROXY_BYPASS` -> comma-separated bypass hosts; local callback addresses are always included
+- `OPENCODE_MULTI_AUTH_DEACTIVATED_FILE` -> override the quarantined-account record path
 - `SMSPOOL_CARRIER` -> optional SMSPool carrier filter
 
 ### Model mapping and runtime behavior

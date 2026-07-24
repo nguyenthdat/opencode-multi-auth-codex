@@ -421,7 +421,15 @@ function consumeProcessLines(stream, onLine) {
             onLine(line);
     });
 }
-function startManualLogin(alias) {
+function queueReauthLimitsRefresh(account) {
+    try {
+        startRefreshQueue([account], account.alias);
+    }
+    catch (err) {
+        logError(`Re-auth completed for ${account.alias}, but refreshing limits failed: ${err}`);
+    }
+}
+function startManualLogin(alias, expectedEmail, refreshLimitsOnSuccess = false) {
     if (pendingLogin) {
         throw new Error(`Login already in progress for ${pendingLogin.alias}`);
     }
@@ -436,8 +444,11 @@ function startManualLogin(alias) {
             output: []
         });
         lastLoginError = null;
-        loginAccount(alias, flow, { timeoutMs: LOGIN_TIMEOUT_MS })
-            .then(() => {
+        loginAccount(alias, flow, { timeoutMs: LOGIN_TIMEOUT_MS, expectedEmail })
+            .then((account) => {
+            if (refreshLimitsOnSuccess) {
+                queueReauthLimitsRefresh(account);
+            }
             logInfo(`Login completed for ${alias}`);
             setPendingLogin(null);
         })
@@ -446,10 +457,10 @@ function startManualLogin(alias) {
             logError(`Login failed for ${alias}: ${err}`);
             setPendingLogin(null);
         });
-        return { ok: true, url: flow.url };
+        return { ok: true, url: flow.url, mode: 'manual' };
     });
 }
-async function startAutoLogin(selector, visible = false, force = false) {
+async function startAutoLogin(selector, visible = false, force = false, targetAlias) {
     if (pendingLogin) {
         throw new Error(`Login already in progress for ${pendingLogin.alias}`);
     }
@@ -466,10 +477,13 @@ async function startAutoLogin(selector, visible = false, force = false) {
     }
     const store = loadStore();
     const existing = findStoreAccountByEmail(store, selected.email);
+    if (targetAlias && existing?.alias !== targetAlias) {
+        throw new Error(`Saved auto-login credential does not match account ${targetAlias}`);
+    }
     if (existing && !force) {
         throw new AccountEmailExistsError(existing.alias);
     }
-    const alias = resolveAutoLoginAlias(store, selected);
+    const alias = targetAlias || resolveAutoLoginAlias(store, selected);
     const flow = await createAuthorizationFlow();
     setPendingLogin({
         alias,
@@ -488,7 +502,10 @@ async function startAutoLogin(selector, visible = false, force = false) {
         existingEmailPolicy: force ? 'update' : 'reject',
         expectedEmail: selected.email
     })
-        .then(() => {
+        .then((account) => {
+        if (targetAlias) {
+            queueReauthLimitsRefresh(account);
+        }
         loginSettled = true;
         stopAutoLoginChild();
         logInfo(`Auto-login completed for ${alias} (${selected.email})`);
@@ -557,7 +574,8 @@ async function startAutoLogin(selector, visible = false, force = false) {
         ok: true,
         alias,
         email: selected.email,
-        url: flow.url
+        url: flow.url,
+        mode: 'auto'
     };
 }
 async function saveAutoLoginAccountAndStart(input, force = false) {
@@ -1001,7 +1019,11 @@ export function startWebConsole(options) {
                 runSync();
                 const store = loadStore();
                 const rawAccounts = Object.values(store.accounts);
-                const accounts = rawAccounts.map(scrubAccount);
+                const autoLogin = loadAutoLoginConfig();
+                const accounts = rawAccounts.map((account) => ({
+                    ...scrubAccount(account),
+                    autoLoginAvailable: Boolean(account.email && findAutoLoginAccount(autoLogin, account.email)?.enabled)
+                }));
                 const deviceAlias = resolveAliasForCurrentAuth(store);
                 const authSummary = getCodexAuthSummary();
                 const storeStatus = getStoreStatus();
@@ -1014,7 +1036,6 @@ export function startWebConsole(options) {
                     : { accounts: [], path: ANTIGRAVITY_ACCOUNTS_FILE };
                 const forceState = getForceState();
                 const forceActive = isForceActive();
-                const autoLogin = loadAutoLoginConfig();
                 sendJson(res, 200, {
                     authPath: getCodexAuthPath(),
                     deviceAlias,
@@ -1364,12 +1385,13 @@ export function startWebConsole(options) {
                     return;
                 }
                 const store = loadStore();
-                if (!store.accounts[alias]) {
+                const account = store.accounts[alias];
+                if (!account) {
                     sendJson(res, 404, { error: 'Unknown alias', code: 'ACCOUNT_NOT_FOUND' });
                     return;
                 }
                 // Phase D: Cannot re-auth a disabled account
-                if (store.accounts[alias].enabled === false) {
+                if (account.enabled === false) {
                     sendJson(res, 409, {
                         error: 'Cannot re-authenticate a disabled account',
                         code: 'ACCOUNT_DISABLED'
@@ -1381,12 +1403,19 @@ export function startWebConsole(options) {
                 try {
                     const body = await readJsonBody(req);
                     const actor = body.actor || 'dashboard';
-                    const result = await startManualLogin(alias);
-                    logInfo(`Re-auth started for ${alias} by ${actor}`);
+                    const autoLoginAccount = body.auto !== false && account.email
+                        ? findAutoLoginAccount(loadAutoLoginConfig(), account.email)
+                        : null;
+                    const result = autoLoginAccount?.enabled === true
+                        ? await startAutoLogin(autoLoginAccount.email, body.visible === true, true, alias)
+                        : await startManualLogin(alias, account.email, true);
+                    logInfo(`${result.mode === 'auto' ? 'Auto re-auth' : 'Re-auth'} started for ${alias} by ${actor}`);
                     sendJson(res, 200, {
                         ...result,
                         alias,
-                        message: 'OAuth flow started. Complete authentication in the browser.'
+                        message: result.mode === 'auto'
+                            ? 'Auto re-authentication started with the saved credential.'
+                            : 'OAuth flow started. Complete authentication in the browser.'
                     });
                 }
                 catch (err) {

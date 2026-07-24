@@ -51,6 +51,13 @@ SMSPOOL_OPENAI_SERVICE = 671
 SMSPOOL_DEFAULT_TIMEOUT = 180
 SMSPOOL_POLL_INTERVAL = 5
 SMSPOOL_DEFAULT_MAX_ORDERS = 3
+PROXY_ENV = "OPENCODE_MULTI_AUTH_PROXY"
+PROXY_USERNAME_ENV = "OPENCODE_MULTI_AUTH_PROXY_USERNAME"
+PROXY_PASSWORD_ENV = "OPENCODE_MULTI_AUTH_PROXY_PASSWORD"
+PROXY_BYPASS_ENV = "OPENCODE_MULTI_AUTH_PROXY_BYPASS"
+DEACTIVATED_FILE_ENV = "OPENCODE_MULTI_AUTH_DEACTIVATED_FILE"
+PROXY_LOCAL_BYPASS = ("localhost", "127.0.0.1", "::1")
+SUPPORTED_PROXY_SCHEMES = {"http", "https", "socks5"}
 
 # Store paths (matching the TypeScript plugin)
 STORE_DIR = Path(
@@ -82,13 +89,74 @@ def load_environment(env_file=ENV_FILE):
         )
     loaded = False
     for name, value in dotenv_values(env_file).items():
-        if name.startswith("SMSPOOL_") and value is not None:
+        is_auto_login_setting = (
+            name.startswith("SMSPOOL_")
+            or name == PROXY_ENV
+            or name.startswith(f"{PROXY_ENV}_")
+            or name == DEACTIVATED_FILE_ENV
+        )
+        if is_auto_login_setting and value is not None:
             os.environ.setdefault(name, value)
             loaded = True
     return loaded
 
 
 load_environment()
+
+
+def build_proxy_config(server=None, username=None, password=None, bypass=None):
+    server = os.environ.get(PROXY_ENV) if server is None else server
+    if not server or not server.strip():
+        return None
+
+    server = server.strip()
+    parsed = urllib.parse.urlsplit(server)
+    if parsed.scheme.lower() not in SUPPORTED_PROXY_SCHEMES:
+        supported = ", ".join(sorted(SUPPORTED_PROXY_SCHEMES))
+        raise ValueError(f"Unsupported proxy scheme; expected one of: {supported}")
+    try:
+        port = parsed.port
+    except ValueError as error:
+        raise ValueError("Proxy port is invalid") from error
+    if not parsed.hostname or port is None:
+        raise ValueError("Proxy must include a hostname and port")
+    if parsed.username is not None or parsed.password is not None:
+        raise ValueError("Keep proxy credentials in the dedicated username/password settings")
+    if parsed.path not in ("", "/") or parsed.query or parsed.fragment:
+        raise ValueError("Proxy URL must not include a path, query, or fragment")
+
+    username = os.environ.get(PROXY_USERNAME_ENV) if username is None else username
+    password = os.environ.get(PROXY_PASSWORD_ENV) if password is None else password
+    username = username.strip() if username else ""
+    password = password if password else ""
+    if bool(username) != bool(password):
+        raise ValueError("Proxy username and password must be configured together")
+    if parsed.scheme.lower() == "socks5" and username:
+        raise ValueError(
+            "Chromium does not support authenticated SOCKS5 proxies; use an authenticated HTTP proxy"
+        )
+
+    configured_bypass = os.environ.get(PROXY_BYPASS_ENV) if bypass is None else bypass
+    bypass_entries = [
+        entry.strip() for entry in (configured_bypass or "").split(",") if entry.strip()
+    ]
+    normalized_entries = {entry.lower() for entry in bypass_entries}
+    for local_address in PROXY_LOCAL_BYPASS:
+        if local_address.lower() not in normalized_entries:
+            bypass_entries.append(local_address)
+
+    host = parsed.hostname
+    if ":" in host:
+        host = f"[{host}]"
+    config = {
+        "server": f"{parsed.scheme.lower()}://{host}:{port}",
+        "bypass": ",".join(bypass_entries),
+    }
+    if username:
+        config["username"] = username
+        config["password"] = password
+    return config
+
 
 # Timing
 BETWEEN_ACCOUNTS_DELAY = 5  # seconds between accounts
@@ -582,6 +650,299 @@ def load_credentials(credentials_path=None):
     return {"defaults": {}, "accounts": parse_pipe_credentials(raw)}
 
 
+def get_deactivated_file(path=None):
+    configured = path or os.environ.get(DEACTIVATED_FILE_ENV)
+    return Path(configured).expanduser() if configured else STORE_DIR / "deactivated-accounts.json"
+
+
+def validate_deactivated_path(credentials_path=None, deactivated_path=None):
+    deactivated_file = get_deactivated_file(deactivated_path).resolve(strict=False)
+    protected_paths = {
+        (Path(credentials_path).expanduser() if credentials_path else CREDENTIALS_FILE).resolve(
+            strict=False
+        ),
+        STORE_FILE.resolve(strict=False),
+        LEGACY_STORE_FILE.resolve(strict=False),
+    }
+    for protected_path in protected_paths:
+        try:
+            same_existing_file = (
+                deactivated_file.exists()
+                and protected_path.exists()
+                and os.path.samefile(deactivated_file, protected_path)
+            )
+        except OSError:
+            same_existing_file = False
+        if deactivated_file == protected_path or same_existing_file:
+            raise ValueError(
+                "Deactivated account file must be separate from credentials and stores"
+            )
+    return deactivated_file
+
+
+def _write_private_text(path, content):
+    path = Path(path)
+    parent_existed = path.parent.exists()
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if os.name != "nt" and not parent_existed:
+        os.chmod(path.parent, 0o700)
+    tmp = path.with_name(f".{path.name}.tmp-{os.getpid()}-{int(time.time() * 1000)}")
+    descriptor = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as output:
+            output.write(content)
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(tmp, path)
+        if os.name != "nt":
+            os.chmod(path, 0o600)
+    finally:
+        if tmp.exists():
+            tmp.unlink()
+
+
+def _load_deactivated_payload(path=None):
+    deactivated_file = get_deactivated_file(path)
+    if not deactivated_file.exists():
+        return {"version": 1, "accounts": []}
+    try:
+        payload = json.loads(deactivated_file.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise RuntimeError(
+            f"Could not read deactivated account file: {deactivated_file}"
+        ) from error
+    accounts = payload.get("accounts") if isinstance(payload, dict) else None
+    if not isinstance(accounts, list):
+        raise RuntimeError(f"Invalid deactivated account file: {deactivated_file}")
+    sanitized = []
+    seen = set()
+    for entry in accounts:
+        if not isinstance(entry, dict):
+            continue
+        email = entry.get("email") if isinstance(entry.get("email"), str) else ""
+        email_key = normalize_email(email)
+        if not email_key or email_key in seen:
+            continue
+        seen.add(email_key)
+        first_detected = entry.get("firstDetectedAt")
+        last_detected = entry.get("lastDetectedAt")
+        detections = entry.get("detections", 1)
+        if not isinstance(detections, int) or detections < 1:
+            detections = 1
+        sanitized.append(
+            {
+                "email": email,
+                "errorCode": "account_deactivated",
+                "firstDetectedAt": first_detected if isinstance(first_detected, str) else None,
+                "lastDetectedAt": last_detected if isinstance(last_detected, str) else None,
+                "detections": detections,
+                "cleanupComplete": entry.get("cleanupComplete") is True,
+                "cleanupCompletedAt": (
+                    entry.get("cleanupCompletedAt")
+                    if isinstance(entry.get("cleanupCompletedAt"), str)
+                    else None
+                ),
+            }
+        )
+    return {"version": 1, "accounts": sanitized}
+
+
+def _save_deactivated_payload(payload, path=None):
+    deactivated_file = get_deactivated_file(path)
+    _write_private_text(deactivated_file, f"{json.dumps(payload, indent=2)}\n")
+    return deactivated_file
+
+
+def load_deactivated_emails(path=None):
+    payload = _load_deactivated_payload(path)
+    return {
+        normalized
+        for entry in payload["accounts"]
+        if (normalized := normalize_email(entry["email"]))
+    }
+
+
+def record_deactivated_account(email, path=None):
+    payload = _load_deactivated_payload(path)
+    email_key = normalize_email(email)
+    if not email_key:
+        raise ValueError("Cannot quarantine an account without an email")
+    detected_at = datetime.now(timezone.utc).isoformat()
+    existing = next(
+        (
+            entry
+            for entry in payload["accounts"]
+            if isinstance(entry, dict) and normalize_email(entry.get("email")) == email_key
+        ),
+        None,
+    )
+    if existing:
+        existing["lastDetectedAt"] = detected_at
+        existing["detections"] = int(existing.get("detections", 1)) + 1
+        existing["cleanupComplete"] = False
+        existing["cleanupCompletedAt"] = None
+    else:
+        payload["accounts"].append(
+            {
+                "email": email,
+                "errorCode": "account_deactivated",
+                "firstDetectedAt": detected_at,
+                "lastDetectedAt": detected_at,
+                "detections": 1,
+                "cleanupComplete": False,
+                "cleanupCompletedAt": None,
+            }
+        )
+    return _save_deactivated_payload(payload, path)
+
+
+def mark_deactivated_cleanup_complete(email, path=None):
+    payload = _load_deactivated_payload(path)
+    email_key = normalize_email(email)
+    entry = next(
+        (entry for entry in payload["accounts"] if normalize_email(entry["email"]) == email_key),
+        None,
+    )
+    if not entry:
+        raise RuntimeError("Deactivated account record disappeared during cleanup")
+    entry["cleanupComplete"] = True
+    entry["cleanupCompletedAt"] = datetime.now(timezone.utc).isoformat()
+    return _save_deactivated_payload(payload, path)
+
+
+def remove_credential_by_email(credentials_path, email):
+    path = Path(credentials_path).expanduser() if credentials_path else CREDENTIALS_FILE
+    if not path.exists():
+        return False
+    raw = path.read_text(encoding="utf-8-sig")
+    email_key = normalize_email(email)
+    removed = False
+
+    if path.suffix.lower() == ".json" or raw.lstrip().startswith(("{", "[")):
+        payload = json.loads(raw)
+        if isinstance(payload, list):
+            filtered = [
+                entry
+                for entry in payload
+                if not (
+                    isinstance(entry, dict) and normalize_email(entry.get("email")) == email_key
+                )
+            ]
+            removed = len(filtered) != len(payload)
+            payload = filtered
+        elif isinstance(payload, dict) and isinstance(payload.get("accounts"), list):
+            accounts = payload["accounts"]
+            filtered = [
+                entry
+                for entry in accounts
+                if not (
+                    isinstance(entry, dict) and normalize_email(entry.get("email")) == email_key
+                )
+            ]
+            removed = len(filtered) != len(accounts)
+            payload["accounts"] = filtered
+        else:
+            raise RuntimeError(f"Invalid credentials file: {path}")
+        content = f"{json.dumps(payload, indent=2)}\n"
+    else:
+        kept_lines = []
+        for line in raw.splitlines(keepends=True):
+            try:
+                parsed = parse_pipe_credentials(line)
+            except ValueError:
+                parsed = []
+            if any(normalize_email(entry.get("email")) == email_key for entry in parsed):
+                removed = True
+                continue
+            kept_lines.append(line)
+        content = "".join(kept_lines)
+
+    if removed:
+        _write_private_text(path, content)
+    return removed
+
+
+def remove_store_backup_account_by_email(email):
+    backup_file = STORE_FILE.with_suffix(".json.bak")
+    if not backup_file.exists():
+        return False
+    try:
+        backup = json.loads(backup_file.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise RuntimeError(f"Could not scrub account store backup: {backup_file}") from error
+    if backup.get("encrypted") is True:
+        return False
+    accounts = backup.get("accounts")
+    if not isinstance(accounts, dict):
+        raise RuntimeError(f"Invalid account store backup: {backup_file}")
+    aliases = [
+        alias
+        for alias, account in accounts.items()
+        if isinstance(account, dict)
+        and normalize_email(account.get("email")) == normalize_email(email)
+    ]
+    if not aliases:
+        return False
+    for alias in aliases:
+        del accounts[alias]
+    if backup.get("activeAlias") in aliases:
+        backup["activeAlias"] = next(iter(accounts), None)
+    _write_private_text(backup_file, f"{json.dumps(backup, indent=2)}\n")
+    return True
+
+
+def remove_store_account_by_email(email):
+    try:
+        store = load_store()
+    except RuntimeError as error:
+        if "store is encrypted" in str(error).lower():
+            remove_store_backup_account_by_email(email)
+            return None
+        raise
+    alias = find_alias_by_email(store, email)
+    if alias:
+        del store["accounts"][alias]
+        if store.get("activeAlias") == alias:
+            store["activeAlias"] = next(iter(store["accounts"]), None)
+        save_store(store)
+    remove_store_backup_account_by_email(email)
+    return alias
+
+
+def cleanup_deactivated_account(email, credentials_path=None, deactivated_path=None):
+    credential_removed = remove_credential_by_email(credentials_path, email)
+    store_alias = remove_store_account_by_email(email)
+    legacy_removed = False
+    if LEGACY_STORE_FILE != STORE_FILE:
+        legacy_removed = remove_credential_by_email(LEGACY_STORE_FILE, email)
+    deactivated_file = mark_deactivated_cleanup_complete(email, deactivated_path)
+    return {
+        "path": deactivated_file,
+        "credentialRemoved": credential_removed,
+        "storeAlias": store_alias,
+        "legacyRemoved": legacy_removed,
+    }
+
+
+def quarantine_deactivated_account(email, credentials_path=None, deactivated_path=None):
+    validate_deactivated_path(credentials_path, deactivated_path)
+    record_deactivated_account(email, deactivated_path)
+    return cleanup_deactivated_account(email, credentials_path, deactivated_path)
+
+
+def retry_pending_deactivated_cleanup(credentials_path=None, deactivated_path=None):
+    payload = _load_deactivated_payload(deactivated_path)
+    failures = []
+    for entry in payload["accounts"]:
+        if entry["cleanupComplete"]:
+            continue
+        try:
+            cleanup_deactivated_account(entry["email"], credentials_path, deactivated_path)
+        except Exception as error:
+            failures.append((entry["email"], error))
+    return failures
+
+
 def generate_totp(secret, timestamp=None, digits=6, period=30):
     normalized = re.sub(r"[\s-]+", "", secret or "").upper()
     if not normalized:
@@ -600,14 +961,49 @@ def generate_totp(secret, timestamp=None, digits=6, period=30):
     return str(value % (10**digits)).zfill(digits)
 
 
+def _input_value(element):
+    try:
+        return element.input_value()
+    except Exception:
+        return element.evaluate("element => element.value")
+
+
 def _human_type(element, value, delay_ms=85):
+    expected = str(value)
+    if not expected:
+        raise ValueError("Cannot enter an empty value")
+
     element.click()
     try:
-        element.press("Control+A")
-        element.press("Backspace")
+        element.fill("")
     except Exception:
-        pass
-    element.type(value, delay=delay_ms)
+        element.press("ControlOrMeta+A")
+        element.press("Backspace")
+    element.type(expected, delay=delay_ms)
+    if _input_value(element) == expected:
+        return
+
+    element.fill(expected)
+    if _input_value(element) == expected:
+        return
+
+    element.evaluate(
+        """
+        (input, nextValue) => {
+          const prototype = input instanceof HTMLTextAreaElement
+            ? HTMLTextAreaElement.prototype
+            : HTMLInputElement.prototype;
+          const setter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set;
+          if (!setter) throw new Error('Input value setter is unavailable');
+          setter.call(input, nextValue);
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        """,
+        expected,
+    )
+    if _input_value(element) != expected:
+        raise RuntimeError("Input value did not persist after typing")
 
 
 def _wait_and_click(page, selector, timeout=10000):
@@ -760,6 +1156,34 @@ class SmsPoolOrderEnded(RuntimeError):
     pass
 
 
+class AccountDeactivatedError(RuntimeError):
+    def __init__(self, email):
+        super().__init__("OpenAI account is deleted or deactivated")
+        self.email = email
+
+
+def _is_account_deactivated(page):
+    try:
+        current_url = page.url.lower()
+    except Exception:
+        current_url = ""
+    try:
+        body = page.inner_text("body").lower()
+    except Exception:
+        body = ""
+    return (
+        "account_deactivated" in current_url
+        or "account_deactivated" in body
+        or "account has been deleted or deactivated" in body
+        or "account was deleted or deactivated" in body
+    )
+
+
+def _raise_if_account_deactivated(page, email):
+    if _is_account_deactivated(page):
+        raise AccountDeactivatedError(email)
+
+
 def wait_for_smspool_sms(
     order_id,
     api_key,
@@ -875,9 +1299,11 @@ def _wait_for_visible(page, selectors, timeout_ms=20000):
     return None
 
 
-def _wait_for_sms_code_or_phone_error(page, timeout_ms=30000):
+def _wait_for_sms_code_or_phone_error(page, timeout_ms=30000, email=None):
     deadline = time.time() + timeout_ms / 1000
     while time.time() < deadline:
+        if _is_account_deactivated(page):
+            raise AccountDeactivatedError(email)
         try:
             body = page.inner_text("body").lower()
         except Exception:
@@ -1016,7 +1442,7 @@ SMS_CODE_SCREEN_SELECTORS = [
 ]
 
 
-def handle_smspool_phone_challenge(page, config=None, attempted_numbers=None):
+def handle_smspool_phone_challenge(page, config=None, attempted_numbers=None, email=None):
     phone_input = _first_visible(page, PHONE_INPUT_SELECTORS)
     if not phone_input:
         return False
@@ -1051,7 +1477,7 @@ def handle_smspool_phone_challenge(page, config=None, attempted_numbers=None):
         print(f"  [4/5] Entering SMSPool number ending in {phone[-4:]}...")
         _human_type(phone_input, phone)
         _submit_verification_form(page)
-        code_input, validation_error = _wait_for_sms_code_or_phone_error(page)
+        code_input, validation_error = _wait_for_sms_code_or_phone_error(page, email=email)
         if not code_input:
             _save_debug_screenshot_page(page, phone[-4:], "phone_rejected")
             order_closed = cancel_smspool_order(order["order_id"], api_key)
@@ -1363,6 +1789,7 @@ def login_account(
     smspool_attempted_numbers=None,
     headless=True,
     browser_engine="auto",
+    proxy_config=None,
     auth_url_override=None,
     external_callback=False,
 ):
@@ -1385,8 +1812,14 @@ def login_account(
         auth_url = build_auth_url(code_challenge, state, redirect_uri)
 
     with launch_automation_browser(headless, browser_engine) as (browser, engine):
+        context_options = {"proxy": proxy_config} if proxy_config else {}
+        if proxy_config:
+            print(
+                f"  [0/5] Proxy enabled: {proxy_config['server']} "
+                f"(bypass: {proxy_config['bypass']})"
+            )
         if engine == "cloak":
-            context = browser.new_context()
+            context = browser.new_context(**context_options)
         else:
             context = browser.new_context(
                 user_agent=(
@@ -1396,6 +1829,7 @@ def login_account(
                 ),
                 locale="en-US",
                 viewport={"width": 1280, "height": 800},
+                **context_options,
             )
             context.add_init_script(
                 """
@@ -1497,6 +1931,8 @@ def login_account(
             while time.time() < deadline:
                 if _has_callback():
                     return
+                if _is_account_deactivated(page):
+                    raise AccountDeactivatedError(email)
                 if page.query_selector(
                     "input[name='email'], input[type='email'], input#email, input[name='username']"
                 ):
@@ -1554,6 +1990,8 @@ def login_account(
                 current_url = page.url.lower()
                 if _has_callback():
                     return "ready"
+                if _is_account_deactivated(page):
+                    return "deactivated"
                 if page.query_selector(otp_selector):
                     return "ready"
                 if page.query_selector("input[name='password'], input[type='password']"):
@@ -1624,6 +2062,8 @@ def login_account(
                 if next_stage == "ready":
                     email_step_error = None
                     break
+                if next_stage == "deactivated":
+                    raise AccountDeactivatedError(email)
                 if next_stage == "retry-email" and attempt < 3:
                     print("  [2/5] OpenAI returned a timeout page after email submit, retrying...")
                     _retry_timeout_page()
@@ -1631,6 +2071,8 @@ def login_account(
                 email_step_error = RuntimeError(
                     f"Email step stalled while waiting for the next auth stage ({next_stage})"
                 )
+            except AccountDeactivatedError:
+                raise
             except Exception as e:
                 email_step_error = e
                 if attempt < 3:
@@ -1638,6 +2080,8 @@ def login_account(
                     try:
                         page.goto(auth_url, wait_until="domcontentloaded", timeout=30000)
                         _wait_for_auth_entry(timeout_ms=20000)
+                    except AccountDeactivatedError:
+                        raise
                     except Exception:
                         pass
                     continue
@@ -1660,6 +2104,8 @@ def login_account(
             try:
                 otp_link.click()
                 page.wait_for_timeout(3000)
+                if _is_account_deactivated(page):
+                    raise AccountDeactivatedError(email)
 
                 # Check if we need to enter email again on OTP page
                 otp_email_input = page.query_selector("input[name='email'], input[type='email']")
@@ -1672,6 +2118,8 @@ def login_account(
                     if submit:
                         submit.click()
                         page.wait_for_timeout(3000)
+                        if _is_account_deactivated(page):
+                            raise AccountDeactivatedError(email)
 
                 # Now OpenAI should send a one-time code to the email
                 # Login to Outlook and read the code
@@ -1681,6 +2129,9 @@ def login_account(
                     # Wait for the email to arrive
                     print("  [3/5] Waiting 10s for code email to arrive...")
                     page.wait_for_timeout(10000)
+                    if _is_account_deactivated(page):
+                        mail_page.close()
+                        raise AccountDeactivatedError(email)
 
                     print("  [3/5] Reading code from Outlook...")
                     otp_code = _outlook_read_latest_code(mail_page)
@@ -1702,11 +2153,14 @@ def login_account(
                             timeout=10000,
                         )
                         page.wait_for_timeout(5000)
+                        _raise_if_account_deactivated(page, email)
                         otp_login_done = True
                     else:
                         print("  [3/5] Could not read OTP from Outlook, trying password...")
                 else:
                     print("  [3/5] Outlook login failed, trying password...")
+            except AccountDeactivatedError:
+                raise
             except Exception as e:
                 print(f"  [3/5] OTP login error: {e}, trying password...")
 
@@ -1716,61 +2170,96 @@ def login_account(
             if "password" in page.url or page.query_selector("input[type='password']"):
                 print("  [3/5] Entering password (fallback)...")
                 try:
-                    pw_input = page.wait_for_selector(
-                        "input[name='password'], input[type='password']",
-                        timeout=10000,
-                    )
-                    _human_type(pw_input, chatgpt_password)
-                    time.sleep(0.8)
-                    _wait_and_click(
-                        page,
-                        "button[type='submit'], button:has-text('Continue'), "
-                        "button:has-text('Log in'), button:has-text('Sign in')",
-                        timeout=10000,
-                    )
-                    page.wait_for_timeout(5000)
+                    err_text = ""
+                    for password_attempt in range(1, 4):
+                        pw_input = page.wait_for_selector(
+                            "input[name='password'], input[type='password']",
+                            timeout=10000,
+                        )
+                        _human_type(pw_input, chatgpt_password)
+                        time.sleep(0.8)
+                        _wait_and_click(
+                            page,
+                            "button[type='submit'], button:has-text('Continue'), "
+                            "button:has-text('Log in'), button:has-text('Sign in')",
+                            timeout=10000,
+                        )
+                        page.wait_for_timeout(5000)
+
+                        if _has_callback():
+                            break
+                        if _is_account_deactivated(page):
+                            raise AccountDeactivatedError(email)
+                        try:
+                            body_text = page.inner_text("body").lower()
+                        except Exception:
+                            body_text = ""
+                        try:
+                            error_el = page.query_selector("[class*='error'], [role='alert']")
+                            err_text = error_el.inner_text().strip() if error_el else ""
+                        except Exception:
+                            err_text = ""
+                        password_required = (
+                            "password is required" in body_text
+                            or "password is required" in err_text.lower()
+                        )
+                        if not password_required:
+                            break
+                        if password_attempt == 3:
+                            raise RuntimeError(
+                                "OpenAI still reports that the password is required after 3 verified attempts"
+                            )
+                        print(
+                            f"  [3/5] Password field was cleared by the page; retrying "
+                            f"({password_attempt + 1}/3)..."
+                        )
 
                     # Check for "Incorrect password" error
-                    error_el = page.query_selector("[class*='error'], [role='alert']")
-                    if error_el:
-                        err_text = error_el.inner_text().strip()
-                        if "incorrect" in err_text.lower():
-                            print(f"  [WARNING] {err_text}")
-                            print("  [3/5] Password rejected. Trying one-time code...")
-                            # Try one-time code as last resort
-                            otp_link2 = page.query_selector(
-                                "button:has-text('one-time code'), a:has-text('one-time code')"
-                            )
-                            if otp_link2 and outlook_password:
-                                otp_link2.click()
-                                page.wait_for_timeout(3000)
-                                mail_page = _outlook_login(context, email, outlook_password)
-                                if mail_page:
-                                    page.wait_for_timeout(10000)
-                                    otp_code = _outlook_read_latest_code(mail_page)
+                    if "incorrect" in err_text.lower():
+                        print(f"  [WARNING] {err_text}")
+                        print("  [3/5] Password rejected. Trying one-time code...")
+                        # Try one-time code as last resort
+                        otp_link2 = page.query_selector(
+                            "button:has-text('one-time code'), a:has-text('one-time code')"
+                        )
+                        if otp_link2 and outlook_password:
+                            otp_link2.click()
+                            page.wait_for_timeout(3000)
+                            _raise_if_account_deactivated(page, email)
+                            mail_page = _outlook_login(context, email, outlook_password)
+                            if mail_page:
+                                page.wait_for_timeout(10000)
+                                if _is_account_deactivated(page):
                                     mail_page.close()
-                                    if otp_code:
-                                        print("  [3/5] Entering OTP code...")
-                                        ci = page.wait_for_selector(
-                                            "input[name='code'], input[type='text']",
-                                            timeout=10000,
-                                        )
-                                        _human_type(ci, otp_code, delay_ms=110)
-                                        time.sleep(0.8)
-                                        _wait_and_click(
-                                            page,
-                                            "button[type='submit'], button:has-text('Continue')",
-                                            timeout=10000,
-                                        )
-                                        page.wait_for_timeout(5000)
-                                        otp_login_done = True
+                                    raise AccountDeactivatedError(email)
+                                otp_code = _outlook_read_latest_code(mail_page)
+                                mail_page.close()
+                                if otp_code:
+                                    print("  [3/5] Entering OTP code...")
+                                    ci = page.wait_for_selector(
+                                        "input[name='code'], input[type='text']",
+                                        timeout=10000,
+                                    )
+                                    _human_type(ci, otp_code, delay_ms=110)
+                                    time.sleep(0.8)
+                                    _wait_and_click(
+                                        page,
+                                        "button[type='submit'], button:has-text('Continue')",
+                                        timeout=10000,
+                                    )
+                                    page.wait_for_timeout(5000)
+                                    _raise_if_account_deactivated(page, email)
+                                    otp_login_done = True
 
+                except AccountDeactivatedError:
+                    raise
                 except Exception as e:
                     _save_debug_screenshot_page(page, email, "password_step")
                     raise RuntimeError(f"Password step failed: {e}")
 
         if not _has_callback():
             totp_done = handle_totp_challenge(page, totp_secret, totp_attempted_counters)
+            _raise_if_account_deactivated(page, email)
 
         # ── Step 4: Handle email verification (after password login)
         if not _has_callback() and not otp_login_done:
@@ -1793,6 +2282,9 @@ def login_account(
                     if resend:
                         resend.click()
                     page.wait_for_timeout(10000)
+                    if _is_account_deactivated(page):
+                        mail_page.close()
+                        raise AccountDeactivatedError(email)
 
                     vcode = _outlook_read_latest_code(mail_page)
                     mail_page.close()
@@ -1810,13 +2302,16 @@ def login_account(
                             timeout=10000,
                         )
                         page.wait_for_timeout(5000)
+                        _raise_if_account_deactivated(page, email)
 
         if not _has_callback() and not totp_done:
             totp_done = handle_totp_challenge(page, totp_secret, totp_attempted_counters)
+            _raise_if_account_deactivated(page, email)
         if not _has_callback():
             phone_verification_done = handle_smspool_phone_challenge(
-                page, smspool_config, smspool_attempted_numbers
+                page, smspool_config, smspool_attempted_numbers, email=email
             )
+            _raise_if_account_deactivated(page, email)
 
         # ── Step 5: Wait for OAuth callback
         print("  [5/5] Waiting for OAuth callback...")
@@ -1859,6 +2354,8 @@ def login_account(
 
         # Try consent immediately (common case after OTP)
         page.wait_for_timeout(2000)
+        if _is_account_deactivated(page):
+            raise AccountDeactivatedError(email)
         _try_handle_consent()
 
         # Poll for callback, periodically re-checking for consent/interstitials
@@ -1870,6 +2367,8 @@ def login_account(
         ) and time.time() < deadline:
             page.wait_for_timeout(1500)
             checks += 1
+            if _is_account_deactivated(page):
+                raise AccountDeactivatedError(email)
 
             # Every few iterations, re-check for consent or other buttons
             if checks % 3 == 0 and (
@@ -1878,10 +2377,12 @@ def login_account(
             ):
                 if not totp_done:
                     totp_done = handle_totp_challenge(page, totp_secret, totp_attempted_counters)
+                    _raise_if_account_deactivated(page, email)
                 if not phone_verification_done:
                     phone_verification_done = handle_smspool_phone_challenge(
-                        page, smspool_config, smspool_attempted_numbers
+                        page, smspool_config, smspool_attempted_numbers, email=email
                     )
+                    _raise_if_account_deactivated(page, email)
                     if phone_verification_done:
                         deadline = time.time() + 45
                 _try_handle_consent()
@@ -1898,7 +2399,11 @@ def login_account(
                     stray = page.query_selector(
                         "button:has-text('Continue'), button:has-text('Accept')"
                     )
-                    if stray and "consent" not in page.url.lower():
+                    password_stage = _first_visible(
+                        page,
+                        ["input[name='password']", "input[type='password']"],
+                    )
+                    if stray and not password_stage and "consent" not in page.url.lower():
                         # Only click if page is NOT localhost (callback already handled)
                         if "localhost" not in page.url:
                             print(
@@ -1907,6 +2412,9 @@ def login_account(
                             stray.click()
                 except Exception:
                     pass
+
+        if _is_account_deactivated(page):
+            raise AccountDeactivatedError(email)
 
         if external_callback and _on_local_callback():
             print("  [DONE] Browser flow completed, callback reached local server.")
@@ -1985,10 +2493,14 @@ def cmd_login(
     auth_url=None,
     browser_engine="auto",
     force=False,
+    proxy_config=None,
+    credentials_path=None,
+    deactivated_path=None,
 ):
     if auth_url and len(targets) != 1:
         print("[ERROR] --auth-url mode requires exactly one target account")
         return 0, len(targets)
+    validate_deactivated_path(credentials_path, deactivated_path)
 
     print(f"\n{'=' * 55}")
     print(f"  Auto-Login: {len(targets)} account(s)")
@@ -1998,9 +2510,17 @@ def cmd_login(
     # Dashboard-assisted mode enforces duplicate policy in TypeScript, which can
     # also read encrypted stores. Standalone mode checks the Python-readable store.
     store = None if force or auth_url else load_store()
+    pending_failures = retry_pending_deactivated_cleanup(credentials_path, deactivated_path)
+    for pending_email, pending_error in pending_failures:
+        print(f"[WARNING] Pending deactivated cleanup failed for {pending_email}: {pending_error}")
+    deactivated_emails = load_deactivated_emails(deactivated_path)
 
     for i, acc in enumerate(targets):
         email = acc["email"]
+        if normalize_email(email) in deactivated_emails:
+            print(f"[{i + 1}/{len(targets)}] {email}: SKIPPED (recorded as account_deactivated)")
+            skipped += 1
+            continue
         existing_alias = find_alias_by_email(store, email) if store else None
         if existing_alias:
             print(
@@ -2055,6 +2575,7 @@ def cmd_login(
                         smspool_attempted_numbers=attempted_numbers,
                         headless=headless,
                         browser_engine=browser_engine,
+                        proxy_config=proxy_config,
                         auth_url_override=auth_url,
                         external_callback=bool(auth_url),
                     )
@@ -2082,6 +2603,30 @@ def cmd_login(
             else:
                 print("  -> FAILED\n")
                 failed += 1
+        except AccountDeactivatedError:
+            try:
+                quarantine = quarantine_deactivated_account(
+                    email,
+                    credentials_path=credentials_path,
+                    deactivated_path=deactivated_path,
+                )
+                removed = (
+                    "credential removed" if quarantine["credentialRemoved"] else "no credential row"
+                )
+                store_note = (
+                    f", removed store alias {quarantine['storeAlias']}"
+                    if quarantine["storeAlias"]
+                    else ""
+                )
+                print(
+                    f"  -> DEACTIVATED: quarantined in {quarantine['path']} "
+                    f"({removed}{store_note})\n"
+                )
+            except Exception as quarantine_error:
+                print(
+                    f"  -> ERROR: account deactivated but quarantine failed: {quarantine_error}\n"
+                )
+            failed += 1
         except Exception as e:
             print(f"  -> ERROR: {e}\n")
             failed += 1
@@ -2114,6 +2659,24 @@ def main():
         default="auto",
         help="Browser engine (auto prefers CloakBrowser when installed)",
     )
+    proxy_group = parser.add_mutually_exclusive_group()
+    proxy_group.add_argument(
+        "--proxy",
+        type=str,
+        metavar="URL",
+        help=f"Override {PROXY_ENV} for this run (HTTP, HTTPS, or SOCKS5)",
+    )
+    proxy_group.add_argument(
+        "--no-proxy",
+        action="store_true",
+        help="Disable the configured auto-login proxy for this run",
+    )
+    parser.add_argument(
+        "--proxy-bypass",
+        type=str,
+        metavar="HOSTS",
+        help=f"Override {PROXY_BYPASS_ENV}; local callback addresses are always added",
+    )
     parser.add_argument(
         "--auth-url",
         type=str,
@@ -2123,6 +2686,11 @@ def main():
         "--credentials-file",
         type=str,
         help="Override the credentials file path",
+    )
+    parser.add_argument(
+        "--deactivated-file",
+        type=str,
+        help=f"Override {DEACTIVATED_FILE_ENV} for quarantined account records",
     )
     args = parser.parse_args()
 
@@ -2162,6 +2730,9 @@ def main():
         sys.exit(1)
 
     headless = not args.visible
+    proxy_config = (
+        None if args.no_proxy else build_proxy_config(server=args.proxy, bypass=args.proxy_bypass)
+    )
     success, failed = cmd_login(
         targets,
         defaults,
@@ -2169,6 +2740,9 @@ def main():
         auth_url=args.auth_url,
         browser_engine=args.browser,
         force=args.force,
+        proxy_config=proxy_config,
+        credentials_path=args.credentials_file,
+        deactivated_path=args.deactivated_file,
     )
     sys.exit(0 if failed == 0 else 1)
 

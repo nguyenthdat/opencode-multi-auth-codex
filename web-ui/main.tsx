@@ -50,6 +50,8 @@ type DashboardAccount = {
   limitError?: string
   tags?: string[]
   notes?: string
+  authInvalid?: boolean
+  autoLoginAvailable?: boolean
 }
 
 type LoginState = {
@@ -450,7 +452,7 @@ function AccountCard({
   const [tags, setTags] = useState((account.tags || []).join(', '))
   const [notes, setNotes] = useState(account.notes || '')
   const headingId = useId()
-  const status = account.limitStatus || 'idle'
+  const status = account.authInvalid ? 'error' : account.limitStatus || 'idle'
   const monogram = account.alias.slice(0, 2).toUpperCase()
   const isBusy = (action: string) => busyAction === `${action}:${account.alias}`
 
@@ -517,6 +519,11 @@ function AccountCard({
       </dl>
 
       {account.limitError && <div className="inline-alert">Limit error: {account.limitError}</div>}
+      {account.authInvalid && !account.limitError && (
+        <div className="inline-alert">
+          Authentication token is invalid. Re-authenticate to recover.
+        </div>
+      )}
 
       <div className="quota-grid">
         <QuotaCard
@@ -601,10 +608,15 @@ function AccountCard({
             type="button"
             className="button button-secondary"
             aria-label={`Re-authenticate ${account.alias}`}
+            title={
+              account.autoLoginAvailable
+                ? 'Uses the matching saved auto-login credential'
+                : 'Opens a manual OAuth flow'
+            }
             disabled={!optimisticEnabled || busyAction !== null}
             onClick={() => void onAction(account.alias, 'reauth')}
           >
-            {isBusy('reauth') ? 'Waiting for OAuth...' : 'Re-authenticate'}
+            {isBusy('reauth') ? 'Re-authenticating...' : 'Re-authenticate'}
           </button>
         </div>
 
@@ -1582,16 +1594,17 @@ function App() {
       if (authWindow) authWindow.opener = null
       setBusyAction(`reauth:${alias}`)
       try {
-        const result = await api<{ url?: string }>(
+        const result = await api<{ url?: string; mode?: 'manual' | 'auto' }>(
           `/api/accounts/${encodeURIComponent(alias)}/reauth`,
           {
             method: 'POST',
             body: JSON.stringify({ actor: 'dashboard' })
           }
         )
-        if (result.url && authWindow) authWindow.location.replace(result.url)
+        if (result.mode === 'auto') authWindow?.close()
+        else if (result.url && authWindow) authWindow.location.replace(result.url)
         else authWindow?.close()
-        setToast('OAuth flow opened')
+        setToast(result.mode === 'auto' ? 'Auto re-authentication started' : 'OAuth flow opened')
         for (let attempt = 0; attempt < 150; attempt += 1) {
           await new Promise((resolve) => window.setTimeout(resolve, 2_000))
           const nextState = await refreshDashboard()
@@ -1601,6 +1614,10 @@ function App() {
           )?.lastRefresh
           if (refreshed && refreshed !== previousRefresh) {
             setToast('Re-authentication complete')
+            return
+          }
+          if (!nextState.login && nextState.lastLoginError) {
+            setToast(`Re-authentication failed: ${nextState.lastLoginError}`)
             return
           }
         }
