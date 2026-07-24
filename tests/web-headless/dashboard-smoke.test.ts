@@ -105,12 +105,18 @@ describe('dashboard headless smoke', () => {
       expect(script).toContain('Force update')
       expect(script).toContain('Auto re-authentication started')
       expect(script).toContain('Authentication token is invalid')
+      expect(script).toContain('Needs attention')
+      expect(script).toContain('Select visible')
+      expect(script).toContain('Edit details')
+      expect(script).toContain('/api/accounts/bulk')
 
       const styleResponse = await fetch(`http://127.0.0.1:${port}/dashboard.css`)
       expect(styleResponse.status).toBe(200)
       expect(styleResponse.headers.get('content-type')).toContain('text/css')
       const styles = await styleResponse.text()
       expect(styles).toContain('.account-card')
+      expect(styles).toContain('.account-card.is-selected')
+      expect(styles).toContain('.bulk-toolbar')
       expect(styles).not.toContain('fonts.googleapis.com')
     } finally {
       await closeServer(server)

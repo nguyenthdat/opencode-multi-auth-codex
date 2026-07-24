@@ -31,6 +31,7 @@ does not load a frontend framework or fonts from a CDN at runtime.
 - Keeps a local account store with migration, validation, and atomic writes.
 - Provides OpenCode TUI controls and a responsive React dashboard to manage accounts and limits.
 - Supports force mode (pin one alias), account enable/disable, and re-auth.
+- Filters accounts by health state and supports bulk metadata, lifecycle, limit-refresh, and removal actions.
 - Supports settings-driven rotation strategy (`round-robin`, `least-used`, `random`, `weighted-round-robin`).
 - Probes limits safely and keeps authoritative data quality rules.
 - Gates non-core Antigravity features behind a feature flag.

@@ -16,6 +16,10 @@ import './dashboard.css'
 type RotationStrategy = 'round-robin' | 'least-used' | 'random' | 'weighted-round-robin'
 type LimitsConfidence = 'fresh' | 'stale' | 'error' | 'unknown'
 type LimitStatus = 'idle' | 'queued' | 'running' | 'success' | 'error' | 'stopped'
+type AccountStatusFilter =
+  'all' | 'attention' | 'auth-error' | 'limit-error' | 'expired' | 'disabled' | 'healthy'
+type BulkAccountAction = 'enable' | 'disable' | 'remove' | 'refresh-limits'
+type TagOperation = 'add' | 'remove' | 'replace'
 
 type RateLimitWindow = {
   remaining?: number
@@ -52,6 +56,10 @@ type DashboardAccount = {
   notes?: string
   authInvalid?: boolean
   autoLoginAvailable?: boolean
+  rateLimitedUntil?: number
+  modelUnsupportedUntil?: number
+  workspaceDeactivatedUntil?: number
+  workspaceDeactivatedError?: string
 }
 
 type LoginState = {
@@ -179,6 +187,13 @@ type TokenRefreshResponse = {
   results: Array<{ alias: string; updated: boolean; error?: string }>
 }
 
+type BulkEditInput = {
+  tagOperation: TagOperation
+  tags: string
+  updateNotes: boolean
+  notes: string
+}
+
 const STRATEGY_HELP: Record<RotationStrategy, string> = {
   'round-robin': 'Cycle through enabled accounts in order.',
   'least-used': 'Prefer the enabled account with the lowest usage count.',
@@ -245,6 +260,35 @@ function remainingPercent(window?: RateLimitWindow): number | null {
     return null
   }
   return Math.round((window.remaining / window.limit) * 100)
+}
+
+function getAccountHealth(account: DashboardAccount, now = Date.now()) {
+  const authError = account.authInvalid === true
+  const limitError =
+    Boolean(account.limitError) ||
+    account.limitStatus === 'error' ||
+    account.limitsConfidence === 'error' ||
+    Boolean(account.rateLimitedUntil && account.rateLimitedUntil > now) ||
+    Boolean(account.modelUnsupportedUntil && account.modelUnsupportedUntil > now) ||
+    Boolean(account.workspaceDeactivatedUntil && account.workspaceDeactivatedUntil > now)
+  const expired = typeof account.expiresAt === 'number' && account.expiresAt <= now
+  const disabled = account.enabled === false
+  return {
+    authError,
+    limitError,
+    expired,
+    disabled,
+    attention: authError || limitError || expired,
+    healthy: !disabled && !authError && !limitError && !expired
+  }
+}
+
+function matchesAccountStatus(account: DashboardAccount, status: AccountStatusFilter): boolean {
+  if (status === 'all') return true
+  const health = getAccountHealth(account)
+  if (status === 'auth-error') return health.authError
+  if (status === 'limit-error') return health.limitError
+  return health[status]
 }
 
 function sortAccounts(
@@ -427,19 +471,23 @@ function AccountCard({
   account,
   active,
   recommended,
+  selected,
   busyAction,
   onAction,
+  onSelect,
   onToggle,
   onSaveMeta
 }: {
   account: DashboardAccount
   active: boolean
   recommended: boolean
+  selected: boolean
   busyAction: string | null
   onAction: (
     alias: string,
     action: 'switch' | 'refresh-token' | 'refresh' | 'remove' | 'reauth'
   ) => Promise<void>
+  onSelect: (alias: string, selected: boolean) => void
   onToggle: (alias: string, enabled: boolean) => Promise<void>
   onSaveMeta: (alias: string, tags: string, notes: string) => Promise<boolean>
 }) {
@@ -452,7 +500,8 @@ function AccountCard({
   const [tags, setTags] = useState((account.tags || []).join(', '))
   const [notes, setNotes] = useState(account.notes || '')
   const headingId = useId()
-  const status = account.authInvalid ? 'error' : account.limitStatus || 'idle'
+  const health = getAccountHealth(account)
+  const status = health.authError || health.limitError ? 'error' : account.limitStatus || 'idle'
   const monogram = account.alias.slice(0, 2).toUpperCase()
   const isBusy = (action: string) => busyAction === `${action}:${account.alias}`
 
@@ -475,11 +524,21 @@ function AccountCard({
 
   return (
     <article
-      className={`account-card${active ? ' is-active' : ''}${recommended ? ' is-recommended' : ''}${optimisticEnabled ? '' : ' is-disabled'}`}
+      className={`account-card${active ? ' is-active' : ''}${recommended ? ' is-recommended' : ''}${optimisticEnabled ? '' : ' is-disabled'}${selected ? ' is-selected' : ''}`}
       aria-labelledby={headingId}
     >
       <header className="account-header">
         <div className="account-identity">
+          <label className="account-selector" title={`Select ${account.alias}`}>
+            <input
+              type="checkbox"
+              checked={selected}
+              disabled={busyAction !== null}
+              aria-label={`Select ${account.alias}`}
+              onChange={(event) => onSelect(account.alias, event.target.checked)}
+            />
+            <span aria-hidden="true" />
+          </label>
           <span className="account-monogram" aria-hidden="true">
             {monogram}
           </span>
@@ -523,6 +582,9 @@ function AccountCard({
         <div className="inline-alert">
           Authentication token is invalid. Re-authenticate to recover.
         </div>
+      )}
+      {account.workspaceDeactivatedError && !account.limitError && (
+        <div className="inline-alert">Workspace error: {account.workspaceDeactivatedError}</div>
       )}
 
       <div className="quota-grid">
@@ -924,21 +986,27 @@ function CommandDeck({
 function FilterBar({
   search,
   tags,
+  status,
+  statusCounts,
   sort,
   count,
   total,
   onSearch,
   onTags,
+  onStatus,
   onSort,
   onClear
 }: {
   search: string
   tags: string
+  status: AccountStatusFilter
+  statusCounts: Record<AccountStatusFilter, number>
   sort: string
   count: number
   total: number
   onSearch: (value: string) => void
   onTags: (value: string) => void
+  onStatus: (value: AccountStatusFilter) => void
   onSort: (value: string) => void
   onClear: () => void
 }) {
@@ -961,6 +1029,21 @@ function FilterBar({
         />
       </label>
       <label>
+        <span>Status</span>
+        <select
+          value={status}
+          onChange={(event) => onStatus(event.target.value as AccountStatusFilter)}
+        >
+          <option value="all">All accounts ({statusCounts.all})</option>
+          <option value="attention">Needs attention ({statusCounts.attention})</option>
+          <option value="auth-error">Auth error ({statusCounts['auth-error']})</option>
+          <option value="limit-error">Limit error ({statusCounts['limit-error']})</option>
+          <option value="expired">Expired token ({statusCounts.expired})</option>
+          <option value="disabled">Disabled ({statusCounts.disabled})</option>
+          <option value="healthy">Healthy ({statusCounts.healthy})</option>
+        </select>
+      </label>
+      <label>
         <span>Sort</span>
         <select value={sort} onChange={(event) => onSort(event.target.value)}>
           <option value="recommended">Recommended first</option>
@@ -980,6 +1063,247 @@ function FilterBar({
         </button>
       </div>
     </section>
+  )
+}
+
+function BulkToolbar({
+  selectedCount,
+  visibleCount,
+  allVisibleSelected,
+  someVisibleSelected,
+  busy,
+  onSelectVisible,
+  onClearSelection,
+  onEdit,
+  onAction
+}: {
+  selectedCount: number
+  visibleCount: number
+  allVisibleSelected: boolean
+  someVisibleSelected: boolean
+  busy: boolean
+  onSelectVisible: (selected: boolean) => void
+  onClearSelection: () => void
+  onEdit: () => void
+  onAction: (action: BulkAccountAction) => void
+}) {
+  const selectVisibleRef = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    if (selectVisibleRef.current) {
+      selectVisibleRef.current.indeterminate = someVisibleSelected && !allVisibleSelected
+    }
+  }, [allVisibleSelected, someVisibleSelected])
+
+  return (
+    <section className={`bulk-toolbar${selectedCount > 0 ? ' has-selection' : ''}`}>
+      <label className="bulk-select-visible">
+        <input
+          ref={selectVisibleRef}
+          type="checkbox"
+          checked={allVisibleSelected}
+          disabled={visibleCount === 0 || busy}
+          onChange={(event) => onSelectVisible(event.target.checked)}
+        />
+        <span>Select visible</span>
+      </label>
+      <div className="bulk-selection-count" aria-live="polite">
+        <strong>{selectedCount}</strong>
+        <span>selected</span>
+      </div>
+      <div className="bulk-actions">
+        <button
+          type="button"
+          className="button button-secondary button-small"
+          disabled={selectedCount === 0 || busy}
+          onClick={onEdit}
+        >
+          Edit details
+        </button>
+        <button
+          type="button"
+          className="button button-secondary button-small"
+          disabled={selectedCount === 0 || busy}
+          onClick={() => onAction('enable')}
+        >
+          Enable
+        </button>
+        <button
+          type="button"
+          className="button button-secondary button-small"
+          disabled={selectedCount === 0 || busy}
+          onClick={() => onAction('disable')}
+        >
+          Disable
+        </button>
+        <button
+          type="button"
+          className="button button-secondary button-small"
+          disabled={selectedCount === 0 || busy}
+          onClick={() => onAction('refresh-limits')}
+        >
+          Refresh limits
+        </button>
+        <button
+          type="button"
+          className="button button-danger button-small"
+          disabled={selectedCount === 0 || busy}
+          onClick={() => onAction('remove')}
+        >
+          Remove
+        </button>
+        {selectedCount > 0 && (
+          <button
+            type="button"
+            className="button button-quiet button-small"
+            disabled={busy}
+            onClick={onClearSelection}
+          >
+            Clear selection
+          </button>
+        )}
+      </div>
+    </section>
+  )
+}
+
+function BulkEditModal({
+  open,
+  aliases,
+  busy,
+  onClose,
+  onSubmit
+}: {
+  open: boolean
+  aliases: string[]
+  busy: boolean
+  onClose: () => void
+  onSubmit: (input: BulkEditInput) => Promise<boolean>
+}) {
+  const dialogRef = useRef<HTMLDialogElement>(null)
+  const tagsRef = useRef<HTMLInputElement>(null)
+  const [tagOperation, setTagOperation] = useState<TagOperation>('add')
+  const [tags, setTags] = useState('')
+  const [updateNotes, setUpdateNotes] = useState(false)
+  const [notes, setNotes] = useState('')
+
+  useEffect(() => {
+    if (!open) return
+    setTagOperation('add')
+    setTags('')
+    setUpdateNotes(false)
+    setNotes('')
+  }, [open])
+
+  useEffect(() => {
+    const dialog = dialogRef.current
+    if (!open || !dialog) return
+    document.body.classList.add('modal-open')
+    dialog.showModal()
+    tagsRef.current?.focus()
+    return () => {
+      document.body.classList.remove('modal-open')
+      if (dialog.open) dialog.close()
+    }
+  }, [open])
+
+  if (!open) return null
+  const hasChanges = tags.trim().length > 0 || tagOperation === 'replace' || updateNotes
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!hasChanges) return
+    if (await onSubmit({ tagOperation, tags, updateNotes, notes })) onClose()
+  }
+
+  return (
+    <dialog
+      ref={dialogRef}
+      className="modal-backdrop"
+      aria-labelledby="bulk-edit-title"
+      onCancel={(event) => {
+        event.preventDefault()
+        onClose()
+      }}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose()
+      }}
+    >
+      <section className="modal bulk-edit-modal">
+        <header>
+          <div>
+            <span className="eyebrow">Batch metadata</span>
+            <h2 id="bulk-edit-title">Edit {aliases.length} accounts</h2>
+          </div>
+          <button type="button" className="button button-quiet" onClick={onClose}>
+            Close
+          </button>
+        </header>
+        <div className="bulk-alias-preview" title={aliases.join(', ')}>
+          {aliases.slice(0, 4).join(' / ')}
+          {aliases.length > 4 ? ` / +${aliases.length - 4} more` : ''}
+        </div>
+        <form onSubmit={(event) => void submit(event)}>
+          <div className="bulk-tag-fields">
+            <label>
+              <span>Tag operation</span>
+              <select
+                value={tagOperation}
+                disabled={busy}
+                onChange={(event) => setTagOperation(event.target.value as TagOperation)}
+              >
+                <option value="add">Add tags</option>
+                <option value="remove">Remove tags</option>
+                <option value="replace">Replace all tags</option>
+              </select>
+            </label>
+            <label>
+              <span>Tags</span>
+              <input
+                ref={tagsRef}
+                value={tags}
+                disabled={busy}
+                placeholder={
+                  tagOperation === 'replace' ? 'Leave empty to clear tags' : 'work, reserve'
+                }
+                onChange={(event) => setTags(event.target.value)}
+              />
+            </label>
+          </div>
+          <label className="bulk-notes-toggle">
+            <input
+              type="checkbox"
+              checked={updateNotes}
+              disabled={busy}
+              onChange={(event) => setUpdateNotes(event.target.checked)}
+            />
+            <span>Replace notes for every selected account</span>
+          </label>
+          <label>
+            <span>Notes</span>
+            <textarea
+              rows={4}
+              value={notes}
+              disabled={busy || !updateNotes}
+              placeholder="Leave empty to clear notes"
+              onChange={(event) => setNotes(event.target.value)}
+            />
+          </label>
+          <div className="modal-actions">
+            <button
+              type="button"
+              className="button button-secondary"
+              disabled={busy}
+              onClick={onClose}
+            >
+              Cancel
+            </button>
+            <button type="submit" className="button" disabled={busy || !hasChanges}>
+              {busy ? 'Applying...' : `Apply to ${aliases.length}`}
+            </button>
+          </div>
+        </form>
+      </section>
+    </dialog>
   )
 }
 
@@ -1478,7 +1802,10 @@ function App() {
   const [busyAction, setBusyAction] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [tags, setTags] = useState('')
+  const [statusFilter, setStatusFilter] = useState<AccountStatusFilter>('all')
   const [sort, setSort] = useState('recommended')
+  const [selectedAliases, setSelectedAliases] = useState<Set<string>>(() => new Set())
+  const [bulkEditOpen, setBulkEditOpen] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
   const [trackedEmail, setTrackedEmail] = useState('')
   const stateRequestId = useRef(0)
@@ -1493,6 +1820,11 @@ function App() {
       if (requestId !== stateRequestId.current) return null
       startTransition(() => {
         setState(nextState)
+        setSelectedAliases((current) => {
+          const available = new Set(nextState.accounts.map((account) => account.alias))
+          const next = new Set(Array.from(current).filter((alias) => available.has(alias)))
+          return next.size === current.size ? current : next
+        })
         setLoadError(null)
       })
       return nextState
@@ -1677,6 +2009,55 @@ function App() {
     )
   }
 
+  function handleSelectAccount(alias: string, selected: boolean) {
+    setSelectedAliases((current) => {
+      const next = new Set(current)
+      if (selected) next.add(alias)
+      else next.delete(alias)
+      return next
+    })
+  }
+
+  async function handleBulkAction(action: BulkAccountAction) {
+    const aliases = Array.from(selectedAliases)
+    if (aliases.length === 0) return
+    if (
+      action === 'remove' &&
+      !window.confirm(
+        `Remove ${aliases.length} selected account${aliases.length === 1 ? '' : 's'} from the local store?`
+      )
+    ) {
+      return
+    }
+    const success = {
+      enable: `${aliases.length} account${aliases.length === 1 ? '' : 's'} enabled`,
+      disable: `${aliases.length} account${aliases.length === 1 ? '' : 's'} disabled`,
+      remove: `${aliases.length} account${aliases.length === 1 ? '' : 's'} removed`,
+      'refresh-limits': `Limit refresh queued for ${aliases.length} account${aliases.length === 1 ? '' : 's'}`
+    }[action]
+    const completed = await runMutation(`bulk:${action}`, success, () =>
+      api('/api/accounts/bulk', {
+        method: 'POST',
+        body: JSON.stringify({ aliases, action })
+      })
+    )
+    if (completed && action === 'remove') setSelectedAliases(new Set())
+  }
+
+  async function handleBulkEdit(input: BulkEditInput) {
+    const aliases = Array.from(selectedAliases)
+    if (aliases.length === 0) return false
+    return runMutation(
+      'bulk:edit',
+      `Details updated for ${aliases.length} account${aliases.length === 1 ? '' : 's'}`,
+      () =>
+        api('/api/accounts/bulk', {
+          method: 'POST',
+          body: JSON.stringify({ aliases, action: 'edit', ...input })
+        })
+    )
+  }
+
   async function handleCreateAccount(input: CreateAccountInput) {
     setTrackedEmail(input.email)
     return runMutation('account:create', 'Account add started', () =>
@@ -1725,6 +2106,18 @@ function App() {
     .split(',')
     .map((tag) => tag.trim().toLowerCase())
     .filter(Boolean)
+  const statusCounts: Record<AccountStatusFilter, number> = {
+    all: state.accounts.length,
+    attention: state.accounts.filter((account) => matchesAccountStatus(account, 'attention'))
+      .length,
+    'auth-error': state.accounts.filter((account) => matchesAccountStatus(account, 'auth-error'))
+      .length,
+    'limit-error': state.accounts.filter((account) => matchesAccountStatus(account, 'limit-error'))
+      .length,
+    expired: state.accounts.filter((account) => matchesAccountStatus(account, 'expired')).length,
+    disabled: state.accounts.filter((account) => matchesAccountStatus(account, 'disabled')).length,
+    healthy: state.accounts.filter((account) => matchesAccountStatus(account, 'healthy')).length
+  }
   const filteredAccounts = sortAccounts(
     state.accounts.filter((account) => {
       const accountTags = (account.tags || []).map((tag) => tag.toLowerCase())
@@ -1740,12 +2133,30 @@ function App() {
         .toLowerCase()
       return (
         (!searchNeedle || haystack.includes(searchNeedle)) &&
-        (tagNeedles.length === 0 || tagNeedles.some((tag) => accountTags.includes(tag)))
+        (tagNeedles.length === 0 || tagNeedles.some((tag) => accountTags.includes(tag))) &&
+        matchesAccountStatus(account, statusFilter)
       )
     }),
     sort,
     state.recommendedAlias
   )
+  const visibleAliases = filteredAccounts.map((account) => account.alias)
+  const selectedAccounts = state.accounts.filter((account) => selectedAliases.has(account.alias))
+  const visibleSelectedCount = visibleAliases.filter((alias) => selectedAliases.has(alias)).length
+  const allVisibleSelected =
+    visibleAliases.length > 0 && visibleSelectedCount === visibleAliases.length
+  const someVisibleSelected = visibleSelectedCount > 0
+
+  function handleSelectVisible(selected: boolean) {
+    setSelectedAliases((current) => {
+      const next = new Set(current)
+      for (const alias of visibleAliases) {
+        if (selected) next.add(alias)
+        else next.delete(alias)
+      }
+      return next
+    })
+  }
 
   return (
     <div className="app-shell">
@@ -1869,17 +2280,32 @@ function App() {
           <FilterBar
             search={search}
             tags={tags}
+            status={statusFilter}
+            statusCounts={statusCounts}
             sort={sort}
             count={filteredAccounts.length}
             total={state.accounts.length}
             onSearch={setSearch}
             onTags={setTags}
+            onStatus={setStatusFilter}
             onSort={setSort}
             onClear={() => {
               setSearch('')
               setTags('')
+              setStatusFilter('all')
               setSort('recommended')
             }}
+          />
+          <BulkToolbar
+            selectedCount={selectedAliases.size}
+            visibleCount={filteredAccounts.length}
+            allVisibleSelected={allVisibleSelected}
+            someVisibleSelected={someVisibleSelected}
+            busy={busyAction !== null}
+            onSelectVisible={handleSelectVisible}
+            onClearSelection={() => setSelectedAliases(new Set())}
+            onEdit={() => setBulkEditOpen(true)}
+            onAction={(action) => void handleBulkAction(action)}
           />
           <div className="account-grid">
             {filteredAccounts.length > 0 ? (
@@ -1889,8 +2315,10 @@ function App() {
                   account={account}
                   active={account.alias === state.deviceAlias}
                   recommended={account.alias === state.recommendedAlias}
+                  selected={selectedAliases.has(account.alias)}
                   busyAction={busyAction}
                   onAction={handleAccountAction}
+                  onSelect={handleSelectAccount}
                   onToggle={handleToggle}
                   onSaveMeta={handleSaveMeta}
                 />
@@ -1963,6 +2391,13 @@ function App() {
         trackedEmail={trackedEmail}
         onClose={() => setModalOpen(false)}
         onSubmit={handleCreateAccount}
+      />
+      <BulkEditModal
+        open={bulkEditOpen}
+        aliases={selectedAccounts.map((account) => account.alias)}
+        busy={busyAction === 'bulk:edit'}
+        onClose={() => setBulkEditOpen(false)}
+        onSubmit={handleBulkEdit}
       />
       <div className={`toast${toast ? ' is-visible' : ''}`} role="status" aria-live="polite">
         {toast}

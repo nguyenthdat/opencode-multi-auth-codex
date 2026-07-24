@@ -254,4 +254,139 @@ describe('web server hardening', () => {
       fs.unwatchFile(getCodexAuthPath())
     }
   })
+
+  it('applies validated bulk account edits, lifecycle changes, and removals', async () => {
+    const originalStore = fs.readFileSync(STORE_FILE, 'utf-8')
+    const runtimeAuthFile = getCodexAuthPath()
+    const originalAuth = fs.readFileSync(runtimeAuthFile, 'utf-8')
+    const fixtureAccount = (alias: string) => ({
+      alias,
+      email: `${alias}@example.com`,
+      accessToken: `${alias}-access`,
+      refreshToken: `${alias}-refresh`,
+      expiresAt: Date.now() + 60_000,
+      usageCount: 0,
+      tags: alias === 'alpha' ? ['existing'] : undefined
+    })
+    fs.writeFileSync(
+      STORE_FILE,
+      JSON.stringify(
+        {
+          version: 2,
+          accounts: {
+            alpha: fixtureAccount('alpha'),
+            beta: fixtureAccount('beta'),
+            gamma: fixtureAccount('gamma'),
+            delta: {
+              ...fixtureAccount('delta'),
+              enabled: false,
+              disabledAt: 1760000000000,
+              disabledBy: 'operator'
+            }
+          },
+          activeAlias: 'alpha',
+          rotationIndex: 0,
+          lastRotation: Date.now()
+        },
+        null,
+        2
+      )
+    )
+    fs.writeFileSync(
+      runtimeAuthFile,
+      JSON.stringify(
+        {
+          OPENAI_API_KEY: null,
+          tokens: {
+            access_token: 'alpha-access',
+            refresh_token: 'alpha-refresh'
+          }
+        },
+        null,
+        2
+      )
+    )
+
+    const port = await getFreePort()
+    const server = startWebConsole({ host: '127.0.0.1', port })
+    const bulk = (body: Record<string, unknown>) =>
+      fetch(`http://127.0.0.1:${port}/api/accounts/bulk`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      })
+
+    try {
+      await once(server, 'listening')
+
+      const editResponse = await bulk({
+        aliases: ['alpha', 'beta'],
+        action: 'edit',
+        tagOperation: 'add',
+        tags: 'Work, Bulk',
+        updateNotes: true,
+        notes: 'Needs review'
+      })
+      expect(editResponse.status).toBe(200)
+
+      const disableResponse = await bulk({ aliases: ['alpha', 'delta'], action: 'disable' })
+      expect(disableResponse.status).toBe(200)
+
+      const unknownResponse = await bulk({ aliases: ['alpha', 'missing'], action: 'enable' })
+      expect(unknownResponse.status).toBe(404)
+
+      const malformedResponse = await bulk({ aliases: ['alpha', 42], action: 'enable' })
+      expect(malformedResponse.status).toBe(400)
+
+      const inheritedAliasResponse = await bulk({
+        aliases: ['alpha', 'constructor'],
+        action: 'remove'
+      })
+      expect(inheritedAliasResponse.status).toBe(404)
+
+      const removeResponse = await bulk({ aliases: ['beta'], action: 'remove' })
+      expect(removeResponse.status).toBe(200)
+
+      const activeRemoveResponse = await bulk({ aliases: ['alpha'], action: 'remove' })
+      expect(activeRemoveResponse.status).toBe(200)
+
+      const stateResponse = await fetch(`http://127.0.0.1:${port}/api/state`)
+      const statePayload = (await stateResponse.json()) as {
+        accounts: Array<{ alias: string }>
+      }
+      expect(statePayload.accounts.some((account) => account.alias === 'alpha')).toBe(false)
+
+      const accountsResponse = await fetch(`http://127.0.0.1:${port}/api/accounts`)
+      const accountsPayload = (await accountsResponse.json()) as {
+        accounts: Array<{ alias: string; enabled?: boolean }>
+      }
+      const enabledAliases = accountsPayload.accounts
+        .filter((account) => account.enabled !== false)
+        .map((account) => account.alias)
+      const disableLastResponse = await bulk({ aliases: enabledAliases, action: 'disable' })
+      expect(disableLastResponse.status).toBe(409)
+
+      const stored = JSON.parse(fs.readFileSync(STORE_FILE, 'utf-8')) as {
+        accounts: Record<string, { enabled?: boolean; tags?: string[]; notes?: string }>
+        activeAlias: string | null
+      }
+      expect(stored.accounts.alpha).toBeUndefined()
+      expect(stored.accounts.beta).toBeUndefined()
+      expect(stored.accounts.gamma.enabled).not.toBe(false)
+      expect(stored.accounts.delta).toMatchObject({
+        enabled: false,
+        disabledAt: 1760000000000,
+        disabledBy: 'operator'
+      })
+      expect(stored.activeAlias).toBe('gamma')
+      expect(JSON.parse(fs.readFileSync(runtimeAuthFile, 'utf-8'))).toMatchObject({
+        tokens: { access_token: 'gamma-access', refresh_token: 'gamma-refresh' }
+      })
+    } finally {
+      await closeServer(server)
+      fs.writeFileSync(STORE_FILE, originalStore)
+      fs.writeFileSync(runtimeAuthFile, originalAuth)
+      fs.unwatchFile(getCodexAuthPath())
+    }
+  })
 })

@@ -7,8 +7,8 @@ import { fileURLToPath, URL } from 'node:url';
 import { exec, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createAuthorizationFlow, loginAccount, refreshToken } from './auth.js';
-import { getCodexAuthPath, getCodexAuthStatus, getCodexAuthSummary, resolveAliasForCurrentAuth, syncCodexAuthFile, writeCodexAuthForAlias } from './codex-auth.js';
-import { AccountEmailExistsError, getStoreStatus, listAccounts, loadStore, removeAccount, updateAccount } from './store.js';
+import { getCodexAuthPath, getCodexAuthStatus, getCodexAuthSummary, resolveAliasForCurrentAuth, syncCodexAuthFile, writeCodexAuthFile, writeCodexAuthForAlias } from './codex-auth.js';
+import { AccountEmailExistsError, getStoreStatus, listAccounts, loadStore, removeAccount, saveStore, updateAccount } from './store.js';
 import { getRefreshQueueState, startRefreshQueue, stopRefreshQueue } from './refresh-queue.js';
 import { getLogPath, logError, logInfo, readLogTail } from './logger.js';
 import { getForceState, activateForce, clearForce, isForceActive, getRemainingForceTimeMs, formatForceDuration } from './force-mode.js';
@@ -1177,6 +1177,15 @@ export function startWebConsole(options) {
                     sendJson(res, 400, { error: 'Missing alias' });
                     return;
                 }
+                const store = loadStore();
+                const deviceAlias = resolveAliasForCurrentAuth(store);
+                if (deviceAlias === body.alias) {
+                    const replacementAlias = Object.keys(store.accounts).find((alias) => alias !== body.alias);
+                    if (replacementAlias)
+                        writeCodexAuthForAlias(replacementAlias);
+                    else
+                        writeCodexAuthFile({ OPENAI_API_KEY: null, tokens: {} });
+                }
                 removeAccount(body.alias);
                 sendJson(res, 200, { ok: true });
                 return;
@@ -1309,6 +1318,152 @@ export function startWebConsole(options) {
                     notes: acc.notes
                 }));
                 sendJson(res, 200, { accounts });
+                return;
+            }
+            if (req.method === 'POST' && path === '/api/accounts/bulk') {
+                const body = await readJsonBody(req);
+                if (!Array.isArray(body.aliases) ||
+                    body.aliases.length === 0 ||
+                    body.aliases.some((alias) => typeof alias !== 'string' || !alias.trim())) {
+                    sendJson(res, 400, { error: 'Invalid account aliases', code: 'INVALID_ALIASES' });
+                    return;
+                }
+                const aliases = Array.from(new Set(body.aliases.map((alias) => alias.trim())));
+                if (aliases.length === 0) {
+                    sendJson(res, 400, { error: 'Select at least one account', code: 'NO_ACCOUNTS' });
+                    return;
+                }
+                let store = loadStore();
+                const unknownAliases = aliases.filter((alias) => !Object.hasOwn(store.accounts, alias));
+                if (unknownAliases.length > 0) {
+                    sendJson(res, 404, {
+                        error: `Unknown alias: ${unknownAliases[0]}`,
+                        code: 'ACCOUNT_NOT_FOUND',
+                        aliases: unknownAliases
+                    });
+                    return;
+                }
+                const action = typeof body.action === 'string' ? body.action : '';
+                if (action === 'refresh-limits') {
+                    const queueState = getRefreshQueueState();
+                    if (queueState?.running) {
+                        sendJson(res, 409, {
+                            error: 'Limit refresh queue is already running',
+                            code: 'QUEUE_BUSY'
+                        });
+                        return;
+                    }
+                    const targets = aliases
+                        .map((alias) => store.accounts[alias])
+                        .filter((account) => account.accessToken && account.refreshToken);
+                    if (targets.length === 0) {
+                        sendJson(res, 400, {
+                            error: 'Selected accounts do not have refreshable tokens',
+                            code: 'NO_REFRESHABLE_ACCOUNTS'
+                        });
+                        return;
+                    }
+                    const queue = startRefreshQueue(targets);
+                    logInfo(`Bulk limit refresh queued for ${targets.length} account(s)`);
+                    sendJson(res, 200, { ok: true, count: targets.length, aliases, queue });
+                    return;
+                }
+                if (action === 'disable') {
+                    const selected = new Set(aliases);
+                    const remainingEnabled = Object.values(store.accounts).filter((account) => !selected.has(account.alias) && account.enabled !== false);
+                    if (remainingEnabled.length === 0) {
+                        sendJson(res, 409, {
+                            error: 'Cannot disable every enabled account',
+                            code: 'LAST_ACCOUNT'
+                        });
+                        return;
+                    }
+                    const disabledAt = Date.now();
+                    for (const alias of aliases) {
+                        if (store.accounts[alias].enabled === false)
+                            continue;
+                        store.accounts[alias] = {
+                            ...store.accounts[alias],
+                            enabled: false,
+                            disabledAt,
+                            disabledBy: 'dashboard'
+                        };
+                    }
+                }
+                else if (action === 'enable') {
+                    for (const alias of aliases) {
+                        store.accounts[alias] = {
+                            ...store.accounts[alias],
+                            enabled: true,
+                            disabledAt: undefined,
+                            disabledBy: undefined,
+                            disableReason: undefined
+                        };
+                    }
+                }
+                else if (action === 'remove') {
+                    const deviceAlias = resolveAliasForCurrentAuth(store);
+                    if (deviceAlias && aliases.includes(deviceAlias)) {
+                        const replacementAlias = Object.keys(store.accounts).find((alias) => !aliases.includes(alias));
+                        if (replacementAlias) {
+                            writeCodexAuthForAlias(replacementAlias);
+                            store = loadStore();
+                        }
+                        else {
+                            writeCodexAuthFile({ OPENAI_API_KEY: null, tokens: {} });
+                        }
+                    }
+                    for (const alias of aliases)
+                        delete store.accounts[alias];
+                    if (store.activeAlias && aliases.includes(store.activeAlias)) {
+                        store.activeAlias = Object.keys(store.accounts)[0] || null;
+                    }
+                    saveStore(store);
+                    logInfo(`Bulk account action ${action} applied to ${aliases.length} account(s)`);
+                    sendJson(res, 200, { ok: true, count: aliases.length, aliases });
+                    return;
+                }
+                else if (action === 'edit') {
+                    const tagOperation = body.tagOperation;
+                    if (!['add', 'remove', 'replace'].includes(tagOperation)) {
+                        sendJson(res, 400, { error: 'Invalid tag operation', code: 'INVALID_TAG_OPERATION' });
+                        return;
+                    }
+                    const tags = Array.from(new Set((typeof body.tags === 'string' ? body.tags.split(',') : [])
+                        .map((tag) => tag.trim().toLowerCase())
+                        .filter(Boolean)));
+                    const updateNotes = body.updateNotes === true;
+                    const notes = typeof body.notes === 'string' ? body.notes.trim() : '';
+                    if (notes.length > 10_000) {
+                        sendJson(res, 400, { error: 'Notes are too long', code: 'NOTES_TOO_LONG' });
+                        return;
+                    }
+                    if (tags.length === 0 && !updateNotes && tagOperation !== 'replace') {
+                        sendJson(res, 400, { error: 'No bulk edits were provided', code: 'NO_CHANGES' });
+                        return;
+                    }
+                    for (const alias of aliases) {
+                        const account = store.accounts[alias];
+                        const currentTags = new Set(account.tags || []);
+                        const nextTags = tagOperation === 'replace'
+                            ? tags
+                            : tagOperation === 'add'
+                                ? Array.from(new Set([...currentTags, ...tags]))
+                                : Array.from(currentTags).filter((tag) => !tags.includes(tag));
+                        store.accounts[alias] = {
+                            ...account,
+                            tags: nextTags.length > 0 ? nextTags : undefined,
+                            notes: updateNotes ? notes || undefined : account.notes
+                        };
+                    }
+                }
+                else {
+                    sendJson(res, 400, { error: 'Invalid bulk action', code: 'INVALID_BULK_ACTION' });
+                    return;
+                }
+                saveStore(store);
+                logInfo(`Bulk account action ${action} applied to ${aliases.length} account(s)`);
+                sendJson(res, 200, { ok: true, count: aliases.length, aliases });
                 return;
             }
             // PUT /api/accounts/:alias/enabled - Enable/disable an account

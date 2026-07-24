@@ -618,7 +618,9 @@ textarea:focus-visible {
 
 .filter-bar {
   display: grid;
-  grid-template-columns: minmax(220px, 1.35fr) minmax(170px, 0.9fr) minmax(210px, 1fr) auto;
+  grid-template-columns:
+    minmax(220px, 1.35fr) minmax(170px, 0.9fr) minmax(170px, 0.9fr) minmax(210px, 1fr)
+    auto;
   gap: 10px;
   padding: 12px;
   border: 1px solid var(--border);
@@ -641,6 +643,67 @@ textarea:focus-visible {
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
   font-size: 10px;
   white-space: nowrap;
+}
+
+.bulk-toolbar {
+  position: sticky;
+  top: 108px;
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  min-height: 54px;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(10, 15, 22, 0.94);
+  box-shadow: 0 18px 45px -35px rgba(0, 0, 0, 0.9);
+  backdrop-filter: blur(16px);
+}
+.bulk-toolbar.has-selection {
+  border-color: rgba(99, 201, 255, 0.34);
+  box-shadow: 0 18px 45px -30px rgba(99, 201, 255, 0.38);
+}
+.bulk-select-visible,
+.bulk-notes-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted-strong);
+  font-size: 11px;
+  font-weight: 600;
+}
+.bulk-select-visible input,
+.bulk-notes-toggle input,
+.account-selector input {
+  width: 16px;
+  min-width: 16px;
+  height: 16px;
+  min-height: 16px;
+  margin: 0;
+  accent-color: var(--cyan);
+}
+.bulk-selection-count {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding-left: 14px;
+  border-left: 1px solid var(--border);
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 10px;
+}
+.bulk-selection-count strong {
+  color: var(--text);
+  font-size: 16px;
+}
+.bulk-actions {
+  display: flex;
+  flex: 1;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 7px;
 }
 
 .account-grid {
@@ -692,6 +755,10 @@ textarea:focus-visible {
   border-style: dashed;
   filter: saturate(0.68);
 }
+.account-card.is-selected {
+  border-color: rgba(99, 201, 255, 0.62);
+  box-shadow: 0 28px 70px -42px rgba(99, 201, 255, 0.6);
+}
 
 .account-header {
   display: flex;
@@ -705,6 +772,22 @@ textarea:focus-visible {
 .account-identity {
   min-width: 0;
   gap: 12px;
+}
+
+.account-selector {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 22px;
+  height: 46px;
+  cursor: pointer;
+}
+.account-selector span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
 }
 
 .account-monogram {
@@ -1005,6 +1088,32 @@ textarea:focus-visible {
 }
 .meta-editor .button {
   justify-self: end;
+}
+
+.bulk-alias-preview {
+  overflow: hidden;
+  margin-top: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.018);
+  color: var(--muted-strong);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bulk-tag-fields {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.75fr) minmax(0, 1.25fr);
+  gap: 10px;
+}
+.bulk-notes-toggle {
+  min-height: 36px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.018);
 }
 
 .account-control-row {
@@ -1384,6 +1493,9 @@ dialog.modal-backdrop::backdrop {
   .filter-summary {
     justify-content: space-between;
   }
+  .bulk-actions {
+    justify-content: flex-start;
+  }
 }
 
 @media (max-width: 860px) {
@@ -1517,6 +1629,26 @@ dialog.modal-backdrop::backdrop {
   }
   .filter-summary {
     align-items: center;
+  }
+  .bulk-toolbar {
+    top: 16px;
+    align-items: flex-start;
+  }
+  .bulk-selection-count {
+    border-left: 0;
+    padding-left: 0;
+  }
+  .bulk-actions {
+    display: grid;
+    flex: 0 0 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+  .bulk-actions .button {
+    width: 100%;
+  }
+  .bulk-tag-fields {
+    grid-template-columns: 1fr;
   }
   .account-header {
     flex-direction: column;
