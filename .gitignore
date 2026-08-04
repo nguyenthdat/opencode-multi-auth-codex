@@ -16,3 +16,4 @@ auto-login/__pycache__/
 .venv/
 .qdrant/
 .ruff_cache/
+accounts-*.txt
