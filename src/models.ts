@@ -8,9 +8,9 @@ type ReasoningLevel = (typeof REASONING_LEVELS)[number]
 export const GPT_5_6_MODELS = ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'] as const
 
 const MODEL_LIMITS: Record<string, { context: number; input?: number; output: number }> = {
-  'gpt-5.6-sol': { context: 1_050_000, input: 922_000, output: 128_000 },
-  'gpt-5.6-luna': { context: 1_050_000, input: 922_000, output: 128_000 },
-  'gpt-5.6-terra': { context: 1_050_000, input: 922_000, output: 128_000 },
+  'gpt-5.6-sol': { context: 530_000, input: 400_000, output: 130_000 },
+  'gpt-5.6-luna': { context: 530_000, input: 400_000, output: 130_000 },
+  'gpt-5.6-terra': { context: 530_000, input: 400_000, output: 130_000 },
   'gpt-5.5': { context: 530000, input: 400000, output: 130000 },
   'gpt-5.4': { context: 1050000, input: 922000, output: 128000 },
   'gpt-5.3': { context: 272000, output: 128000 },

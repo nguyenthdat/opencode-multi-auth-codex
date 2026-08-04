@@ -35,7 +35,7 @@ describe('runtime model injection', () => {
     for (const modelID of ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna']) {
       expect(config.provider.openai.models[modelID]).toEqual(
         expect.objectContaining({
-          limit: { context: 1_050_000, input: 922_000, output: 128_000 },
+          limit: { context: 530_000, input: 400_000, output: 130_000 },
           variants: expect.objectContaining({
             max: expect.objectContaining({ reasoningEffort: 'xhigh' }),
             fast: expect.objectContaining({ serviceTier: 'priority' })

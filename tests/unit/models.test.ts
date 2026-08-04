@@ -16,7 +16,7 @@ describe('model defaults', () => {
         expect.objectContaining({
           name: `${modelID} (OAuth)`,
           reasoning: true,
-          limit: { context: 1_050_000, input: 922_000, output: 128_000 },
+          limit: { context: 530_000, input: 400_000, output: 130_000 },
           options: expect.objectContaining({ reasoningEffort: 'medium' })
         })
       )
@@ -41,8 +41,8 @@ describe('model defaults', () => {
     ])
 
     expect(Object.keys(models)).toEqual(['gpt-5.6-terra'])
-    expect(models['gpt-5.6-terra']?.limit.context).toBe(1_050_000)
-    expect(models['gpt-5.6-terra']?.limit.input).toBe(922_000)
+    expect(models['gpt-5.6-terra']?.limit.context).toBe(530_000)
+    expect(models['gpt-5.6-terra']?.limit.input).toBe(400_000)
     expect(models['gpt-5.6-terra']?.variants.max.reasoningEffort).toBe('xhigh')
     expect(models['gpt-5.6-terra']?.variants.fast.serviceTier).toBe('priority')
   })
