@@ -13,7 +13,7 @@ describe('runtime model injection', () => {
     process.env = originalEnv
   })
 
-  it('injects GPT-5.6 family models with nested variants by default', async () => {
+  it('injects and whitelists GPT-5.6 base and standalone fast models by default', async () => {
     const hooks = await MultiAuthPlugin({
       client: {},
       $: (() => ({ nothrow: () => ({ catch: () => undefined }) })) as any,
@@ -33,16 +33,30 @@ describe('runtime model injection', () => {
     await hooks.config?.(config)
 
     for (const modelID of ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna']) {
+      const fastModelID = `${modelID}-fast`
       expect(config.provider.openai.models[modelID]).toEqual(
         expect.objectContaining({
           limit: { context: 530_000, input: 400_000, output: 130_000 },
           variants: expect.objectContaining({
-            max: expect.objectContaining({ reasoningEffort: 'xhigh' }),
-            fast: expect.objectContaining({ serviceTier: 'priority' })
+            max: expect.objectContaining({ reasoningEffort: 'xhigh' })
           })
         })
       )
+      expect(config.provider.openai.models[modelID]?.variants.fast).toBeUndefined()
+      expect(config.provider.openai.models[fastModelID]).toEqual(
+        expect.objectContaining({
+          limit: { context: 530_000, input: 400_000, output: 130_000 },
+          options: expect.objectContaining({ serviceTier: 'priority' })
+        })
+      )
+      for (const reasoningLevel of ['none', 'low', 'medium', 'high', 'xhigh', 'max']) {
+        expect(config.provider.openai.models[fastModelID]?.variants[reasoningLevel]).toEqual(
+          expect.objectContaining({ serviceTier: 'priority' })
+        )
+      }
+      expect(config.provider.openai.models[fastModelID]?.variants.max.reasoningEffort).toBe('xhigh')
       expect(config.provider.openai.whitelist).toContain(modelID)
+      expect(config.provider.openai.whitelist).toContain(fastModelID)
       expect(config.provider.openai.models[`${modelID}-max`]).toBeUndefined()
     }
     expect(config.provider.openai.models['gpt-5.3-codex-spark']?.variants.xhigh).toBeDefined()
@@ -64,6 +78,17 @@ describe('runtime model injection', () => {
               name: 'Custom Sol',
               options: { textVerbosity: 'high' },
               variants: { high: { reasoningEffort: 'high', textVerbosity: 'high' } }
+            },
+            'gpt-5.6-sol-fast': {
+              name: 'Custom Fast Sol',
+              options: { textVerbosity: 'high' },
+              variants: {
+                high: {
+                  reasoningEffort: 'high',
+                  textVerbosity: 'high',
+                  serviceTier: 'priority'
+                }
+              }
             }
           },
           whitelist: []
@@ -80,6 +105,25 @@ describe('runtime model injection', () => {
         variants: expect.objectContaining({
           max: expect.objectContaining({ reasoningEffort: 'xhigh' }),
           high: expect.objectContaining({ textVerbosity: 'high' })
+        })
+      })
+    )
+    expect(config.provider.openai.models['gpt-5.6-sol-fast']).toEqual(
+      expect.objectContaining({
+        name: 'Custom Fast Sol',
+        options: expect.objectContaining({
+          textVerbosity: 'high',
+          serviceTier: 'priority'
+        }),
+        variants: expect.objectContaining({
+          max: expect.objectContaining({
+            reasoningEffort: 'xhigh',
+            serviceTier: 'priority'
+          }),
+          high: expect.objectContaining({
+            textVerbosity: 'high',
+            serviceTier: 'priority'
+          })
         })
       })
     )

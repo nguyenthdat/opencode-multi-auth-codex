@@ -585,7 +585,12 @@ const MultiAuthPlugin: Plugin = async ({
 
         const defaultModels = getDefaultModels()
         const injectedModelIds = Array.from(
-          new Set([latestModel, ...GPT_5_6_MODELS, 'gpt-5.3-codex-spark'])
+          new Set([
+            latestModel,
+            ...GPT_5_6_MODELS,
+            ...GPT_5_6_MODELS.map((modelID) => `${modelID}-fast`),
+            'gpt-5.3-codex-spark'
+          ])
         )
 
         for (const modelID of injectedModelIds) {
