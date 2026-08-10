@@ -151,9 +151,16 @@ enabled:
 - `gpt-5.6-sol`
 - `gpt-5.6-terra`
 - `gpt-5.6-luna`
+- `gpt-5.6-sol-fast`
+- `gpt-5.6-terra-fast`
+- `gpt-5.6-luna-fast`
 
-Reasoning levels are OpenCode variants, not separate model IDs. Current
-variants include `none`, `low`, `medium`, `high`, `xhigh`, `max`, and `fast`.
+Reasoning levels remain OpenCode variants, not separate model IDs. Each GPT-5.6
+base and standalone fast model exposes `none`, `low`, `medium`, `high`, `xhigh`,
+and `max`. Fast is a standalone GPT-5.6 model ID, and its top-level options and
+every reasoning variant use the priority service tier. GPT-5.6 base models do
+not have a nested `fast` variant; `gpt-5.5` and `gpt-5.4` keep their existing
+nested `fast` variants.
 
 If an OpenCode build rejects a new model before plugin configuration is
 applied, select a previously accepted model and explicitly enable latest-model

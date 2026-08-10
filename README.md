@@ -176,8 +176,10 @@ opencode plugin github:nguyenthdat/opencode-multi-auth-codex --global
 OpenCode support:
 
 - the plugin backfills `gpt-5.6-sol`, `gpt-5.6-terra`, and `gpt-5.6-luna`
-- reasoning levels are OpenCode variants on each base model, not separate model IDs
-- each GPT-5.6 family model exposes `none`, `low`, `medium`, `high`, `xhigh`, `max`, and `fast`
+- the plugin also backfills standalone `gpt-5.6-sol-fast`, `gpt-5.6-terra-fast`, and `gpt-5.6-luna-fast` model IDs
+- reasoning levels remain OpenCode variants on each model, not separate model IDs
+- each GPT-5.6 base and standalone fast model exposes `none`, `low`, `medium`, `high`, `xhigh`, and `max` reasoning variants
+- GPT-5.6 base models do not expose a nested `fast` variant; select the corresponding standalone `-fast` model instead
 - `max` maps to OpenAI's strongest supported request effort, `xhigh`
 - OpenCode builds that validate model IDs before plugin config is applied may still reject a direct GPT-5.6 family selection
 - in that case, keep selecting a previous accepted model such as `openai/gpt-5.5` or `openai/gpt-5.4` and enable latest-model mapping:
@@ -186,7 +188,7 @@ OpenCode support:
 export OPENCODE_MULTI_AUTH_PREFER_CODEX_LATEST=1
 ```
 
-- `gpt-5.5` and `gpt-5.4` remain available and can be selected or used as rollback targets
+- `gpt-5.5` and `gpt-5.4` remain available with their existing nested `fast` variants and can be selected or used as rollback targets
 - disable runtime model injection only if you explicitly want that behavior off:
 
 ```bash
@@ -574,11 +576,13 @@ Environment variables:
 
 ## Fast Mode
 
-For OpenCode builds that accept GPT-5.6 family IDs, select a base model such as `openai/gpt-5.6-sol`, then choose its `fast` variant.
+For OpenCode builds that accept GPT-5.6 family IDs, select a standalone fast model such as `openai/gpt-5.6-sol-fast`, then choose its reasoning variant.
 
 - the backend model stays `gpt-5.6-sol`
-- the injected `fast` variant sets `serviceTier=priority`
-- reasoning variants stay under the same base model
+- the standalone fast model sets `serviceTier=priority` in its top-level options and every reasoning variant
+- reasoning remains a variant selection: `none`, `low`, `medium`, `high`, `xhigh`, or `max`
+- the base `gpt-5.6-sol` model no longer has a nested `fast` variant
+- `gpt-5.5` and `gpt-5.4` keep their existing nested `fast` variants
 
 Equivalent OpenCode model configuration:
 
@@ -587,13 +591,14 @@ Equivalent OpenCode model configuration:
   "provider": {
     "openai": {
       "models": {
-        "gpt-5.6-sol": {
+        "gpt-5.6-sol-fast": {
+          "options": {
+            "reasoningEffort": "medium",
+            "serviceTier": "priority"
+          },
           "variants": {
             "max": {
-              "reasoningEffort": "xhigh"
-            },
-            "fast": {
-              "reasoningEffort": "medium",
+              "reasoningEffort": "xhigh",
               "serviceTier": "priority"
             }
           }
