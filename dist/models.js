@@ -27,7 +27,7 @@ function getModelLimits(modelId) {
 function isGPT56Family(baseId) {
     return baseId.startsWith('gpt-5.6-');
 }
-function buildReasoningOptions(level) {
+function buildReasoningOptions(level, serviceTier) {
     // OpenAI names its strongest effort "xhigh"; expose "max" as an OpenCode alias.
     const reasoningEffort = level === 'max' ? 'xhigh' : level;
     return {
@@ -35,11 +35,12 @@ function buildReasoningOptions(level) {
         reasoningSummary: reasoningEffort === 'high' || reasoningEffort === 'xhigh' ? 'detailed' : 'auto',
         textVerbosity: 'medium',
         include: ['reasoning.encrypted_content'],
-        store: false
+        store: false,
+        ...(serviceTier ? { serviceTier } : {})
     };
 }
 function supportsFastMode(baseId) {
-    return isGPT56Family(baseId) || baseId === 'gpt-5.5' || baseId === 'gpt-5.4';
+    return baseId === 'gpt-5.5' || baseId === 'gpt-5.4';
 }
 function getReasoningLevels(baseId) {
     if (isGPT56Family(baseId))
@@ -54,25 +55,32 @@ function getReasoningLevels(baseId) {
         return ['low', 'medium', 'high', 'xhigh'];
     return ['none', 'low', 'medium', 'high', 'xhigh'];
 }
-function buildProviderModel(baseId) {
-    const variants = Object.fromEntries(getReasoningLevels(baseId).map((level) => [level, buildReasoningOptions(level)]));
-    if (supportsFastMode(baseId)) {
+function buildProviderModel(modelId, serviceTier) {
+    const variants = Object.fromEntries(getReasoningLevels(modelId).map((level) => [level, buildReasoningOptions(level, serviceTier)]));
+    if (supportsFastMode(modelId)) {
         variants.fast = {
             ...buildReasoningOptions('medium'),
             serviceTier: 'priority'
         };
     }
     return {
-        name: `${baseId} (OAuth)`,
+        name: `${modelId} (OAuth)`,
         reasoning: true,
-        limit: getModelLimits(baseId),
+        limit: getModelLimits(modelId),
         modalities: {
             input: ['text', 'image'],
             output: ['text']
         },
-        options: buildReasoningOptions('medium'),
+        options: buildReasoningOptions('medium', serviceTier),
         variants
     };
+}
+function addProviderModels(result, baseId) {
+    result[baseId] = buildProviderModel(baseId);
+    if (isGPT56Family(baseId)) {
+        const fastModelId = `${baseId}-fast`;
+        result[fastModelId] = buildProviderModel(fastModelId, 'priority');
+    }
 }
 export async function fetchAvailableModels(token) {
     try {
@@ -97,8 +105,7 @@ export function filterGPT5Models(models) {
 export function generateModelVariants(baseModels) {
     const result = {};
     for (const model of baseModels) {
-        const baseId = model.id;
-        result[baseId] = buildProviderModel(baseId);
+        addProviderModels(result, model.id);
     }
     return result;
 }
@@ -119,7 +126,7 @@ export function getDefaultModels() {
     ];
     const result = {};
     for (const baseId of defaults) {
-        result[baseId] = buildProviderModel(baseId);
+        addProviderModels(result, baseId);
     }
     return result;
 }

@@ -484,7 +484,12 @@ const MultiAuthPlugin = async ({ client, $, serverUrl, project, directory }) => 
                 openai.models ||= {};
                 openai.whitelist ||= [];
                 const defaultModels = getDefaultModels();
-                const injectedModelIds = Array.from(new Set([latestModel, ...GPT_5_6_MODELS, 'gpt-5.3-codex-spark']));
+                const injectedModelIds = Array.from(new Set([
+                    latestModel,
+                    ...GPT_5_6_MODELS,
+                    ...GPT_5_6_MODELS.map((modelID) => `${modelID}-fast`),
+                    'gpt-5.3-codex-spark'
+                ]));
                 for (const modelID of injectedModelIds) {
                     const model = defaultModels[modelID];
                     if (!model)
