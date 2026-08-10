@@ -17,3 +17,4 @@ auto-login/__pycache__/
 .qdrant/
 .ruff_cache/
 accounts-*.txt
+.omo/
