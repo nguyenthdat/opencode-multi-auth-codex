@@ -35,7 +35,10 @@ function isGPT56Family(baseId: string): boolean {
   return baseId.startsWith('gpt-5.6-')
 }
 
-function buildReasoningOptions(level: ReasoningLevel): ProviderModelOptions {
+function buildReasoningOptions(
+  level: ReasoningLevel,
+  serviceTier?: 'priority'
+): ProviderModelOptions {
   // OpenAI names its strongest effort "xhigh"; expose "max" as an OpenCode alias.
   const reasoningEffort = level === 'max' ? 'xhigh' : level
 
@@ -45,12 +48,13 @@ function buildReasoningOptions(level: ReasoningLevel): ProviderModelOptions {
       reasoningEffort === 'high' || reasoningEffort === 'xhigh' ? 'detailed' : 'auto',
     textVerbosity: 'medium',
     include: ['reasoning.encrypted_content'],
-    store: false
+    store: false,
+    ...(serviceTier ? { serviceTier } : {})
   }
 }
 
 function supportsFastMode(baseId: string): boolean {
-  return isGPT56Family(baseId) || baseId === 'gpt-5.5' || baseId === 'gpt-5.4'
+  return baseId === 'gpt-5.5' || baseId === 'gpt-5.4'
 }
 
 function getReasoningLevels(baseId: string): readonly ReasoningLevel[] {
@@ -62,12 +66,12 @@ function getReasoningLevels(baseId: string): readonly ReasoningLevel[] {
   return ['none', 'low', 'medium', 'high', 'xhigh']
 }
 
-function buildProviderModel(baseId: string): ProviderModel {
+function buildProviderModel(modelId: string, serviceTier?: 'priority'): ProviderModel {
   const variants = Object.fromEntries(
-    getReasoningLevels(baseId).map((level) => [level, buildReasoningOptions(level)])
+    getReasoningLevels(modelId).map((level) => [level, buildReasoningOptions(level, serviceTier)])
   )
 
-  if (supportsFastMode(baseId)) {
+  if (supportsFastMode(modelId)) {
     variants.fast = {
       ...buildReasoningOptions('medium'),
       serviceTier: 'priority'
@@ -75,15 +79,24 @@ function buildProviderModel(baseId: string): ProviderModel {
   }
 
   return {
-    name: `${baseId} (OAuth)`,
+    name: `${modelId} (OAuth)`,
     reasoning: true,
-    limit: getModelLimits(baseId),
+    limit: getModelLimits(modelId),
     modalities: {
       input: ['text', 'image'],
       output: ['text']
     },
-    options: buildReasoningOptions('medium'),
+    options: buildReasoningOptions('medium', serviceTier),
     variants
+  }
+}
+
+function addProviderModels(result: Record<string, ProviderModel>, baseId: string): void {
+  result[baseId] = buildProviderModel(baseId)
+
+  if (isGPT56Family(baseId)) {
+    const fastModelId = `${baseId}-fast`
+    result[fastModelId] = buildProviderModel(fastModelId, 'priority')
   }
 }
 
@@ -114,8 +127,7 @@ export function generateModelVariants(baseModels: OpenAIModel[]): Record<string,
   const result: Record<string, ProviderModel> = {}
 
   for (const model of baseModels) {
-    const baseId = model.id
-    result[baseId] = buildProviderModel(baseId)
+    addProviderModels(result, model.id)
   }
 
   return result
@@ -140,7 +152,7 @@ export function getDefaultModels(): Record<string, ProviderModel> {
   const result: Record<string, ProviderModel> = {}
 
   for (const baseId of defaults) {
-    result[baseId] = buildProviderModel(baseId)
+    addProviderModels(result, baseId)
   }
 
   return result
