@@ -2629,18 +2629,27 @@ def cmd_login(
 
     for i, acc in enumerate(targets):
         email = acc["email"]
+        account_force = force
         if normalize_email(email) in deactivated_emails:
             print(f"[{i + 1}/{len(targets)}] {email}: SKIPPED (recorded as account_deactivated)")
             skipped += 1
             continue
         existing_alias = find_alias_by_email(store, email) if store else None
         if existing_alias:
-            print(
-                f"[{i + 1}/{len(targets)}] {email}: SKIPPED "
-                f"(already exists as {existing_alias}; use --force to refresh)"
-            )
-            skipped += 1
-            continue
+            existing_account = store["accounts"].get(existing_alias) if store else None
+            if existing_account and existing_account.get("authInvalid"):
+                account_force = True
+                print(
+                    f"[{i + 1}/{len(targets)}] {email}: FORCE LOGIN "
+                    f"(authentication is invalid for {existing_alias})"
+                )
+            else:
+                print(
+                    f"[{i + 1}/{len(targets)}] {email}: SKIPPED "
+                    f"(already exists as {existing_alias}; use --force to refresh)"
+                )
+                skipped += 1
+                continue
 
         chatgpt_pw = (
             acc.get("chatgpt_password") or acc.get("password") or defaults.get("chatgpt_password")
@@ -2680,7 +2689,7 @@ def cmd_login(
                         email,
                         chatgpt_pw,
                         alias=acc.get("alias"),
-                        force=force,
+                        force=account_force,
                         outlook_password=outlook_pw,
                         totp_secret=totp_secret,
                         smspool_config=smspool_config,

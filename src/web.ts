@@ -662,10 +662,11 @@ async function startAutoLogin(
 
   const store = loadStore()
   const existing = findStoreAccountByEmail(store, selected.email)
+  const shouldForce = force || existing?.authInvalid === true
   if (targetAlias && existing?.alias !== targetAlias) {
     throw new Error(`Saved auto-login credential does not match account ${targetAlias}`)
   }
-  if (existing && !force) {
+  if (existing && !shouldForce) {
     throw new AccountEmailExistsError(existing.alias)
   }
   const alias = targetAlias || resolveAutoLoginAlias(store, selected)
@@ -686,7 +687,7 @@ async function startAutoLogin(
   let loginSettled = false
   const loginPromise = loginAccount(alias, flow, {
     timeoutMs: AUTO_LOGIN_TIMEOUT_MS,
-    existingEmailPolicy: force ? 'update' : 'reject',
+    existingEmailPolicy: shouldForce ? 'update' : 'reject',
     expectedEmail: selected.email
   })
     .then((account) => {
@@ -717,7 +718,7 @@ async function startAutoLogin(
       flow.url,
       '--credentials-file',
       config.path,
-      ...(force ? ['--force'] : []),
+      ...(shouldForce ? ['--force'] : []),
       ...(visible ? ['--visible'] : [])
     ],
     {
@@ -784,7 +785,7 @@ async function saveAutoLoginAccountAndStart(
 ): Promise<{ ok: true; alias: string; email: string; url: string }> {
   if (!force) {
     const existing = findStoreAccountByEmail(loadStore(), input.email)
-    if (existing) {
+    if (existing && existing.authInvalid !== true) {
       throw new AccountEmailExistsError(existing.alias)
     }
   }

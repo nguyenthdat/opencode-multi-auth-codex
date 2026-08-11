@@ -730,6 +730,31 @@ class CommandLoginTests(unittest.TestCase):
         load_store.assert_not_called()
         self.assertTrue(login.call_args.kwargs["force"])
 
+    def test_auth_invalid_existing_email_is_force_logged_in(self):
+        account = {
+            "email": "Existing@Example.com",
+            "chatgpt_password": "password",
+        }
+        store = {
+            "accounts": {
+                "codex-01": {
+                    "alias": "codex-01",
+                    "email": "existing@example.com",
+                    "authInvalid": True,
+                }
+            }
+        }
+
+        with (
+            patch.object(auto_login, "load_store", return_value=store),
+            patch.object(auto_login, "login_account", return_value=account["email"]) as login,
+            patch("builtins.print"),
+        ):
+            result = auto_login.cmd_login([account], {})
+
+        self.assertEqual(result, (1, 0))
+        self.assertTrue(login.call_args.kwargs["force"])
+
     def test_dashboard_auth_url_does_not_read_python_store(self):
         account = {
             "email": "existing@example.com",
