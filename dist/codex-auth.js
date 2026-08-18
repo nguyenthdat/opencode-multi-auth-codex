@@ -10,24 +10,24 @@ function getCodexAuthFilePath() {
     const CODEX_DIR = path.join(os.homedir(), '.codex');
     return path.join(CODEX_DIR, 'auth.json');
 }
-const CODEX_DIR = path.join(os.homedir(), '.codex');
-const CODEX_AUTH_FILE = getCodexAuthFilePath();
 let lastFingerprint = null;
 let lastAuthError = null;
 export function getCodexAuthPath() {
-    return CODEX_AUTH_FILE;
+    return getCodexAuthFilePath();
 }
-function ensureDir() {
-    if (!fs.existsSync(CODEX_DIR)) {
-        fs.mkdirSync(CODEX_DIR, { recursive: true, mode: 0o700 });
+function ensureDir(authFilePath) {
+    const authDirectory = path.dirname(authFilePath);
+    if (!fs.existsSync(authDirectory)) {
+        fs.mkdirSync(authDirectory, { recursive: true, mode: 0o700 });
     }
 }
 export function loadCodexAuthFile() {
     lastAuthError = null;
-    if (!fs.existsSync(CODEX_AUTH_FILE))
+    const authFilePath = getCodexAuthFilePath();
+    if (!fs.existsSync(authFilePath))
         return null;
     try {
-        const raw = fs.readFileSync(CODEX_AUTH_FILE, 'utf-8');
+        const raw = fs.readFileSync(authFilePath, 'utf-8');
         return JSON.parse(raw);
     }
     catch (err) {
@@ -37,8 +37,9 @@ export function loadCodexAuthFile() {
     }
 }
 export function writeCodexAuthFile(auth) {
-    ensureDir();
-    fs.writeFileSync(CODEX_AUTH_FILE, JSON.stringify(auth, null, 2), {
+    const authFilePath = getCodexAuthFilePath();
+    ensureDir(authFilePath);
+    fs.writeFileSync(authFilePath, JSON.stringify(auth, null, 2), {
         mode: 0o600
     });
 }
