@@ -26,14 +26,11 @@ function getCodexAuthFilePath(): string {
   return path.join(CODEX_DIR, 'auth.json')
 }
 
-const CODEX_DIR = path.join(os.homedir(), '.codex')
-const CODEX_AUTH_FILE = getCodexAuthFilePath()
-
 let lastFingerprint: string | null = null
 let lastAuthError: string | null = null
 
 export function getCodexAuthPath(): string {
-  return CODEX_AUTH_FILE
+  return getCodexAuthFilePath()
 }
 
 export interface CodexAuthSummary {
@@ -49,17 +46,19 @@ export interface CodexAuthSummary {
   hasIdToken: boolean
 }
 
-function ensureDir(): void {
-  if (!fs.existsSync(CODEX_DIR)) {
-    fs.mkdirSync(CODEX_DIR, { recursive: true, mode: 0o700 })
+function ensureDir(authFilePath: string): void {
+  const authDirectory = path.dirname(authFilePath)
+  if (!fs.existsSync(authDirectory)) {
+    fs.mkdirSync(authDirectory, { recursive: true, mode: 0o700 })
   }
 }
 
 export function loadCodexAuthFile(): CodexAuthFile | null {
   lastAuthError = null
-  if (!fs.existsSync(CODEX_AUTH_FILE)) return null
+  const authFilePath = getCodexAuthFilePath()
+  if (!fs.existsSync(authFilePath)) return null
   try {
-    const raw = fs.readFileSync(CODEX_AUTH_FILE, 'utf-8')
+    const raw = fs.readFileSync(authFilePath, 'utf-8')
     return JSON.parse(raw) as CodexAuthFile
   } catch (err) {
     lastAuthError = 'Failed to parse codex auth.json'
@@ -69,8 +68,9 @@ export function loadCodexAuthFile(): CodexAuthFile | null {
 }
 
 export function writeCodexAuthFile(auth: CodexAuthFile): void {
-  ensureDir()
-  fs.writeFileSync(CODEX_AUTH_FILE, JSON.stringify(auth, null, 2), {
+  const authFilePath = getCodexAuthFilePath()
+  ensureDir(authFilePath)
+  fs.writeFileSync(authFilePath, JSON.stringify(auth, null, 2), {
     mode: 0o600
   })
 }
