@@ -36,7 +36,7 @@ describe('runtime model injection', () => {
       const fastModelID = `${modelID}-fast`
       expect(config.provider.openai.models[modelID]).toEqual(
         expect.objectContaining({
-          limit: { context: 530_000, input: 400_000, output: 130_000 },
+          limit: { context: 1_050_000, input: 922_000, output: 128_000 },
           variants: expect.objectContaining({
             max: expect.objectContaining({ reasoningEffort: 'xhigh' })
           })
@@ -45,7 +45,7 @@ describe('runtime model injection', () => {
       expect(config.provider.openai.models[modelID]?.variants.fast).toBeUndefined()
       expect(config.provider.openai.models[fastModelID]).toEqual(
         expect.objectContaining({
-          limit: { context: 530_000, input: 400_000, output: 130_000 },
+          limit: { context: 1_050_000, input: 922_000, output: 128_000 },
           options: expect.objectContaining({ serviceTier: 'priority' })
         })
       )

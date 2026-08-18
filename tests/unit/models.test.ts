@@ -17,7 +17,7 @@ describe('model defaults', () => {
         expect.objectContaining({
           name: `${modelID} (OAuth)`,
           reasoning: true,
-          limit: { context: 530_000, input: 400_000, output: 130_000 },
+          limit: { context: 1_050_000, input: 922_000, output: 128_000 },
           options: expect.objectContaining({ reasoningEffort: 'medium' })
         })
       )
@@ -28,7 +28,7 @@ describe('model defaults', () => {
         expect.objectContaining({
           name: `${modelID}-fast (OAuth)`,
           reasoning: true,
-          limit: { context: 530_000, input: 400_000, output: 130_000 },
+          limit: { context: 1_050_000, input: 922_000, output: 128_000 },
           options: expect.objectContaining({
             reasoningEffort: 'medium',
             serviceTier: 'priority'
@@ -69,10 +69,18 @@ describe('model defaults', () => {
     ])
 
     expect(Object.keys(models)).toEqual(['gpt-5.6-terra', 'gpt-5.6-terra-fast'])
-    expect(models['gpt-5.6-terra']?.limit.context).toBe(530_000)
-    expect(models['gpt-5.6-terra']?.limit.input).toBe(400_000)
+    expect(models['gpt-5.6-terra']?.limit).toEqual({
+      context: 1_050_000,
+      input: 922_000,
+      output: 128_000
+    })
     expect(models['gpt-5.6-terra']?.variants.max.reasoningEffort).toBe('xhigh')
     expect(models['gpt-5.6-terra']?.variants.fast).toBeUndefined()
+    expect(models['gpt-5.6-terra-fast']?.limit).toEqual({
+      context: 1_050_000,
+      input: 922_000,
+      output: 128_000
+    })
     expect(models['gpt-5.6-terra-fast']?.options.serviceTier).toBe('priority')
     for (const reasoningLevel of REASONING_LEVELS) {
       expect(models['gpt-5.6-terra-fast']?.variants[reasoningLevel]?.serviceTier).toBe('priority')
